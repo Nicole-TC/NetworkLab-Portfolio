@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NetworkLab — Portal del Estudiante</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+    <header>
+        <div class="header-left">
+            <h1 class="header-brand">🛡️ NetworkLab</h1>
+            <span class="subtitle">Portal del Usuario / Alumno</span>
+        </div>
+        <div class="header-right">
+            <div class="user-badge">
+                <span id="txt-nombre-usuario">Cargando...</span>
+                <span class="user-role-badge role-alumno">ALUMNO</span>
+            </div>
+            <button id="btn-logout" class="btn-logout">Cerrar sesión</button>
+        </div>
+    </header>
+
+    <main class="portal-page">
+        <!-- Tarjeta Principal: Reloj y Tiempo de Conexión -->
+        <section class="portal-hero-card">
+            <p class="portal-user-greeting">Estado de tu Conexión de Red</p>
+            <div id="reloj-tiempo" class="portal-clock-display">--:--</div>
+            <p id="subtexto-tiempo" style="color: var(--color-texto-suave); font-size: 0.95rem; margin: 0 0 16px;">
+                Calculando tiempo disponible...
+            </p>
+            <div id="banner-alerta" style="display: none; padding: 10px; border-radius: 8px; font-weight: 600; margin-bottom: 16px;"></div>
+
+            <div style="display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; font-size: 0.85rem; color: var(--color-texto-suave); border-top: 1px solid rgba(255,255,255,0.08); padding-top: 16px;">
+                <span>🖥️ <strong>Equipo:</strong> <span id="info-equipo">—</span></span>
+                <span>🌐 <strong>IP:</strong> <span id="info-ip">—</span></span>
+                <span>🟢 <strong>Estado:</strong> <span id="info-estado">Conectado</span></span>
+            </div>
+        </section>
+
+        <!-- Grilla de 2 Columnas: QoS y Filtro Web -->
+        <div class="portal-grid-2">
+            <!-- Tarjeta: Límite de Velocidad (QoS) -->
+            <div class="portal-subcard">
+                <h3>⚡ Velocidad Asignada (QoS)</h3>
+                <p style="color: var(--color-texto-suave); font-size: 0.88rem; line-height: 1.5; margin: 0 0 16px;">
+                    El administrador del laboratorio ha establecido una política de calidad de servicio (QoS) para tu equipo:
+                </p>
+                <div style="margin-bottom: 16px;">
+                    <span id="badge-velocidad-portal" class="badge badge-qos" style="font-size: 1rem; padding: 6px 14px;">
+                        ⚡ Ilimitada
+                    </span>
+                </div>
+                <p id="desc-velocidad" style="font-size: 0.82rem; color: var(--color-texto-suave); margin: 0;">
+                    Dispones de ancho de banda estándar para tus actividades académicas.
+                </p>
+            </div>
+
+            <!-- Tarjeta: Políticas de Filtrado Web -->
+            <div class="portal-subcard">
+                <h3>🛡️ Sitios y Categorías de Red</h3>
+                <p style="color: var(--color-texto-suave); font-size: 0.88rem; line-height: 1.5; margin: 0 0 12px;">
+                    Durante el uso de la computadora de laboratorio, aplican los siguientes filtros de seguridad de MikroTik:
+                </p>
+                <div>
+                    <strong style="font-size: 0.8rem; color: #fca5a5; text-transform: uppercase;">🚫 Categorías Restringidas:</strong>
+                    <div id="lista-categorias-bloqueadas" class="domain-pill-list">
+                        <span class="domain-pill">Cargando...</span>
+                    </div>
+                </div>
+
+                <div style="margin-top: 16px;">
+                    <strong style="font-size: 0.8rem; color: #86efac; text-transform: uppercase;">✅ Permitido:</strong>
+                    <div class="domain-pill-list">
+                        <span class="allowed-pill">Google & Búsqueda</span>
+                        <span class="allowed-pill">Wikipedia & Enciclopedias</span>
+                        <span class="allowed-pill">Aulas Virtuales</span>
+                        <span class="allowed-pill">Documentación y Código</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <span>NetworkLab • Laboratorio de Redes y Telecomunicaciones</span>
+    </footer>
+
+    <script src="portal.js"></script>
+</body>
+
+</html>

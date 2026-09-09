@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NetworkLab — Panel de Administración</title>
+    <link rel="stylesheet" href="style.css" />
+    <!-- Chart.js para gráficos interactivos -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+    <!-- Encabezado con Perfil y Logout -->
+    <header>
+        <div class="header-left">
+            <h1 class="header-brand">🛡️ NetworkLab</h1>
+            <span class="subtitle">Consola de Administración de Red</span>
+        </div>
+        <div class="header-right">
+            <div class="user-badge">
+                <span id="admin-user-display">admin</span>
+                <span class="user-role-badge role-admin">ADMIN</span>
+            </div>
+            <button id="btn-logout" class="btn-logout">Cerrar sesión</button>
+        </div>
+    </header>
+
+    <!-- Barra de Pestañas (Tabs) -->
+    <nav class="tabs-nav">
+        <button class="tab-btn active" data-tab="tab-control">
+            🖥️ Dispositivos y Sesiones
+        </button>
+        <button class="tab-btn" data-tab="tab-filtrado">
+            🛡️ Filtrado Web
+        </button>
+        <button class="tab-btn" data-tab="tab-estadisticas">
+            📊 Estadísticas y Gráficos
+        </button>
+        <button class="tab-btn" data-tab="tab-usuarios">
+            👥 Gestión de Usuarios
+        </button>
+    </nav>
+
+    <main>
+        <!-- PESTAÑA 1: Dispositivos y Sesiones -->
+        <div id="tab-control" class="tab-content active">
+            <!-- Panel: Dispositivos -->
+            <section class="panel">
+                <div class="panel-header">
+                    <h2>Dispositivos en Red</h2>
+                    <div class="panel-actions">
+                        <label class="label-tiempo-default">
+                            <span>Tiempo def:</span>
+                            <input type="number" id="input-tiempo-default" min="1" placeholder="Ilimitado (min)" class="input-tiempo input-tiempo-compact" />
+                        </label>
+                        <label class="label-tiempo-default">
+                            <span>Velocidad def:</span>
+                            <select id="select-velocidad-default" class="select-velocidad">
+                                <option value="">Ilimitada</option>
+                                <option value="2">2 Mbps</option>
+                                <option value="5">5 Mbps</option>
+                                <option value="10">10 Mbps</option>
+                                <option value="20">20 Mbps</option>
+                            </select>
+                        </label>
+                        <button id="btn-sync-devices" class="btn btn-primary">
+                            Sincronizar dispositivos
+                        </button>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table id="tabla-dispositivos">
+                        <thead>
+                            <tr>
+                                <th>Estado</th>
+                                <th>Nombre</th>
+                                <th>IP</th>
+                                <th>MAC</th>
+                                <th>Última Actividad</th>
+                                <th>Tiempo / Velocidad / Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Se completa dinámicamente -->
+                        </tbody>
+                    </table>
+                </div>
+                <p id="mensaje-dispositivos" class="mensaje-vacio"></p>
+            </section>
+
+            <!-- Panel: Sesiones Activas -->
+            <section class="panel">
+                <div class="panel-header">
+                    <h2>Sesiones Activas (Conectados Ahora)</h2>
+                    <button id="btn-sync-sessions" class="btn btn-primary">
+                        Sincronizar sesiones
+                    </button>
+                </div>
+                <div class="table-responsive">
+                    <table id="tabla-sesiones">
+                        <thead>
+                            <tr>
+                                <th>Dispositivo</th>
+                                <th>IP</th>
+                                <th>Conectado Desde</th>
+                                <th>Tiempo Restante</th>
+                                <th>Velocidad (QoS)</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Se completa dinámicamente -->
+                        </tbody>
+                    </table>
+                </div>
+                <p id="mensaje-sesiones" class="mensaje-vacio"></p>
+            </section>
+        </div>
+
+        <!-- PESTAÑA 2: Filtrado Web -->
+        <div id="tab-filtrado" class="tab-content">
+            <section class="panel">
+                <div class="panel-header">
+                    <h2>🛡️ Filtrado de Sitios Web (Bloqueo de Dominios en MikroTik)</h2>
+                </div>
+                <div class="filtro-formulario">
+                    <div class="filtro-input-group">
+                        <input 
+                            type="text" 
+                            id="input-dominio-bloquear" 
+                            placeholder="Escribe el dominio a bloquear (ej: youtube.com, tiktok.com)" 
+                            class="input-dominio"
+                        />
+                        <select id="select-categoria-bloquear" class="select-categoria">
+                            <option value="General">Categoría: General</option>
+                            <option value="Redes Sociales">Redes Sociales</option>
+                            <option value="Streaming">Streaming</option>
+                            <option value="Juegos">Juegos</option>
+                            <option value="Adultos">Adultos</option>
+                        </select>
+                        <button id="btn-bloquear-dominio" class="btn btn-rechazar">
+                            Bloquear Dominio
+                        </button>
+                    </div>
+                    <div class="botones-rapidos-container">
+                        <span class="label-rapido">Bloqueo rápido:</span>
+                        <button class="btn btn-quick-block" data-domain="youtube.com" data-cat="Streaming">+ YouTube</button>
+                        <button class="btn btn-quick-block" data-domain="tiktok.com" data-cat="Redes Sociales">+ TikTok</button>
+                        <button class="btn btn-quick-block" data-domain="instagram.com" data-cat="Redes Sociales">+ Instagram</button>
+                        <button class="btn btn-quick-block" data-domain="facebook.com" data-cat="Redes Sociales">+ Facebook</button>
+                        <button class="btn btn-quick-block" data-domain="netflix.com" data-cat="Streaming">+ Netflix</button>
+                        <button class="btn btn-quick-block" data-domain="roblox.com" data-cat="Juegos">+ Roblox</button>
+                        <button class="btn btn-quick-block" data-domain="twitch.tv" data-cat="Streaming">+ Twitch</button>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table id="tabla-dominios">
+                        <thead>
+                            <tr>
+                                <th>Dominio Bloqueado</th>
+                                <th>Categoría</th>
+                                <th>Fecha de Bloqueo</th>
+                                <th>Estado en MikroTik</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Se completa dinámicamente -->
+                        </tbody>
+                    </table>
+                </div>
+                <p id="mensaje-dominios" class="mensaje-vacio"></p>
+            </section>
+        </div>
+
+        <!-- PESTAÑA 3: Estadísticas y Gráficos -->
+        <div id="tab-estadisticas" class="tab-content">
+            <section class="panel">
+                <div class="panel-header">
+                    <h2>📊 Métricas Generales del Laboratorio</h2>
+                    <button id="btn-refrescar-stats" class="btn btn-primary">
+                        Refrescar Estadísticas
+                    </button>
+                </div>
+
+                <!-- Tarjetas KPI -->
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-icon">🖥️</div>
+                        <div class="kpi-info">
+                            <h3>Dispositivos</h3>
+                            <div id="kpi-dispositivos" class="kpi-valor">0</div>
+                            <small id="kpi-dispositivos-sub" style="color: var(--color-texto-suave)">0 aprobados</small>
+                        </div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-icon">⚡</div>
+                        <div class="kpi-info">
+                            <h3>Sesiones Activas</h3>
+                            <div id="kpi-sesiones-activas" class="kpi-valor">0</div>
+                            <small id="kpi-sesiones-sub" style="color: var(--color-texto-suave)">0 totales</small>
+                        </div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-icon">⏳</div>
+                        <div class="kpi-info">
+                            <h3>Horas Conectadas</h3>
+                            <div id="kpi-horas" class="kpi-valor">0h</div>
+                            <small style="color: var(--color-texto-suave)">Uso histórico acumulado</small>
+                        </div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-icon">🛡️</div>
+                        <div class="kpi-info">
+                            <h3>Sitios Bloqueados</h3>
+                            <div id="kpi-dominios" class="kpi-valor">0</div>
+                            <small style="color: var(--color-texto-suave)">Activos en MikroTik DNS</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Gráficos Interactivos -->
+                <div class="charts-grid">
+                    <div class="chart-card">
+                        <h3>📈 Consumo de Tiempo por Computadora (Horas)</h3>
+                        <div class="chart-container">
+                            <canvas id="chart-consumo"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="chart-card">
+                        <h3>🎯 Distribución de Dominios Bloqueados por Categoría</h3>
+                        <div class="chart-container">
+                            <canvas id="chart-categorias"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- PESTAÑA 4: Gestión de Usuarios -->
+        <div id="tab-usuarios" class="tab-content">
+            <section class="panel">
+                <div class="panel-header">
+                    <h2>👥 Gestión de Cuentas de Acceso</h2>
+                </div>
+
+                <!-- Formulario de Creación de Usuario -->
+                <div class="user-form-card">
+                    <h3 style="margin: 0 0 12px; font-size: 0.95rem;">Registrar Nuevo Usuario / Alumno</h3>
+                    <form id="form-crear-usuario" class="user-form-grid">
+                        <div class="form-group">
+                            <label for="nuevo-usuario-nombre">Usuario *</label>
+                            <input type="text" id="nuevo-usuario-nombre" class="input-texto" placeholder="ej: alumno2" required />
+                        </div>
+                        <div class="form-group">
+                            <label for="nuevo-usuario-clave">Contraseña *</label>
+                            <input type="password" id="nuevo-usuario-clave" class="input-texto" placeholder="••••••••" required />
+                        </div>
+                        <div class="form-group">
+                            <label for="nuevo-usuario-completo">Nombre Completo</label>
+                            <input type="text" id="nuevo-usuario-completo" class="input-texto" placeholder="ej: Juan Pérez (PC-02)" />
+                        </div>
+                        <div class="form-group">
+                            <label for="nuevo-usuario-rol">Rol</label>
+                            <select id="nuevo-usuario-rol" class="select-rol">
+                                <option value="alumno">Alumno / Usuario</option>
+                                <option value="admin">Administrador</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            + Crear Usuario
+                        </button>
+                    </form>
+                </div>
+
+                <div class="table-responsive">
+                    <table id="tabla-usuarios">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Usuario</th>
+                                <th>Nombre Completo</th>
+                                <th>Rol</th>
+                                <th>Fecha Registro</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Se completa dinámicamente -->
+                        </tbody>
+                    </table>
+                </div>
+                <p id="mensaje-usuarios" class="mensaje-vacio"></p>
+            </section>
+        </div>
+    </main>
+
+    <footer>
+        <span id="estado-conexion">Conectado al backend</span>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
