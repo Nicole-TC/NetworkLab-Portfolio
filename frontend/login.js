@@ -1,4 +1,4 @@
-const API_URL = "http://localhost:8000";
+const API_URL = `${window.location.protocol}//${window.location.hostname || "localhost"}:8000`;
 
 const formLogin = document.querySelector("#form-login");
 const inputUsuario = document.querySelector("#input-usuario");

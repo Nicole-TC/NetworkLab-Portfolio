@@ -27,20 +27,21 @@ def sync_sessions(db: DBSession = Depends(get_db)):
       en los leases por más de SESSION_TIMEOUT_MINUTES.
     """
     leases = routeros_client.get_dhcp_leases()
-    macs_presentes = {lease["mac_address"] for lease in leases if lease["mac_address"]}
+    active_macs = routeros_client.get_hotspot_active_macs()
+    macs_presentes = active_macs if active_macs else {lease["mac_address"].strip().upper() for lease in leases if lease["mac_address"]}
 
     abiertas = 0
     cerradas = 0
     ahora = datetime.now()
 
-    # Abrir o refrescar sesiones de dispositivos presentes y aprobados
+    # Refrescar pulso de dispositivos presentes que tienen sesión abierta
     for lease in leases:
-        mac = lease["mac_address"]
+        mac = (lease.get("mac_address") or "").strip().upper()
         if not mac:
             continue
 
         device = db.query(Dispositivo).filter(Dispositivo.direccion_mac == mac).first()
-        if not device or device.estado != EstadoDispositivo.aprobado:
+        if not device:
             continue
 
         sesion_abierta = (
@@ -49,21 +50,9 @@ def sync_sessions(db: DBSession = Depends(get_db)):
             .first()
         )
 
-        if sesion_abierta:
+        if sesion_abierta and (mac in macs_presentes):
             sesion_abierta.ultimo_pulso = ahora
             sesion_abierta.direccion_ip = lease["ip_address"]
-        else:
-            nueva_sesion = Sesion(
-                dispositivo_id=device.id,
-                direccion_ip=lease["ip_address"],
-                inicio=ahora,
-                ultimo_pulso=ahora,
-                limite_tiempo_minutos=None,
-                limite_velocidad_mbps=device.limite_velocidad_mbps,
-                esta_expirada=False,
-            )
-            db.add(nueva_sesion)
-            abiertas += 1
 
     # Evaluar sesiones abiertas para cierre por inactividad o expiración de tiempo
     sesiones_abiertas = db.query(Sesion).filter(Sesion.fin.is_(None)).all()
@@ -74,37 +63,72 @@ def sync_sessions(db: DBSession = Depends(get_db)):
         if not device:
             continue
 
-        sigue_presente = device.direccion_mac in macs_presentes
+        mac_norm = (device.direccion_mac or "").strip().upper()
+        sigue_presente = mac_norm in macs_presentes
 
         # 1. Chequear si expiró el tiempo límite asignado
         if sesion.limite_tiempo_minutos is not None and sesion.limite_tiempo_minutos > 0:
             segundos_transcurridos = (ahora - sesion.inicio).total_seconds()
             if segundos_transcurridos >= sesion.limite_tiempo_minutos * 60:
-                # Tiempo cumplido: Bloquear en MikroTik y cerrar sesión
-                if device.direccion_ip:
-                    routeros_client.block_device(device.direccion_ip)
+                # Tiempo cumplido: Revocar Hotspot bypass y cerrar sesión
                 sesion.fin = ahora
                 sesion.esta_expirada = True
-                device.estado = EstadoDispositivo.rechazado
+                device.estado = EstadoDispositivo.pendiente
+                if device.direccion_mac:
+                    routeros_client.revoke_hotspot_device(device.direccion_mac)
+                if device.direccion_ip:
+                    routeros_client.remove_bandwidth_limit(device.direccion_ip)
+                    routeros_client.unblock_device(device.direccion_ip)
                 cerradas += 1
                 continue
 
-        # 2. Chequear si se desconectó y superó el timeout de inactividad
+        # 2. Chequear si se desconectó de la red física
         if not sigue_presente and sesion.ultimo_pulso < limite_inactividad:
-            sesion.fin = sesion.ultimo_pulso
+            sesion.fin = sesion.ultimo_pulso or ahora
+            sesion.esta_expirada = True
+            device.estado = EstadoDispositivo.pendiente
+            if device.direccion_mac:
+                routeros_client.revoke_hotspot_device(device.direccion_mac)
+            if device.direccion_ip:
+                routeros_client.remove_bandwidth_limit(device.direccion_ip)
             cerradas += 1
 
     db.commit()
+
     return {"sesiones_abiertas": abiertas, "sesiones_cerradas": cerradas}
 
 
 @router.get("/")
 def list_sessions(device_id: int | None = None, db: DBSession = Depends(get_db)):
-    """Historial de sesiones, opcionalmente filtrado por dispositivo."""
+    """Historial completo de sesiones con detalle de equipo, duración y estado."""
     query = db.query(Sesion)
     if device_id is not None:
         query = query.filter(Sesion.dispositivo_id == device_id)
-    return query.order_by(Sesion.inicio.desc()).all()
+    sesiones = query.order_by(Sesion.inicio.desc()).limit(100).all()
+
+    ahora = datetime.now()
+    resultado = []
+    for s in sesiones:
+        dev = s.dispositivo
+        fin = s.fin or ahora
+        duracion_seg = int((fin - s.inicio).total_seconds())
+        resultado.append(
+            {
+                "id": s.id,
+                "dispositivo_id": s.dispositivo_id,
+                "nombre_host": dev.nombre_host if dev else "Equipo",
+                "direccion_mac": dev.direccion_mac if dev else "—",
+                "direccion_ip": s.direccion_ip or (dev.direccion_ip if dev else "—"),
+                "inicio": s.inicio,
+                "fin": s.fin,
+                "esta_activa": s.fin is None,
+                "duracion_segundos": duracion_seg,
+                "duracion_minutos": round(duracion_seg / 60, 1),
+                "limite_tiempo_minutos": s.limite_tiempo_minutos,
+                "limite_velocidad_mbps": s.limite_velocidad_mbps,
+            }
+        )
+    return resultado
 
 
 @router.get("/active")
@@ -177,6 +201,8 @@ def add_time_to_session(
             routeros_client.unblock_device(device.direccion_ip)
             if sesion.limite_velocidad_mbps:
                 routeros_client.set_bandwidth_limit(device.direccion_ip, sesion.limite_velocidad_mbps)
+        if device.direccion_mac:
+            routeros_client.authorize_hotspot_device(device.direccion_mac, device.direccion_ip)
     else:
         # Si sigue abierta, aumentamos el límite
         if sesion.limite_tiempo_minutos is None:
@@ -194,7 +220,7 @@ def add_time_to_session(
 
 @router.post("/{session_id}/disconnect")
 def disconnect_session(session_id: int, db: DBSession = Depends(get_db)):
-    """Corta inmediatamente una sesión y bloquea el dispositivo en MikroTik."""
+    """Corta inmediatamente una sesión activa en MikroTik y deja el equipo en espera de nueva autorización."""
     sesion = db.query(Sesion).filter(Sesion.id == session_id).first()
     if not sesion:
         raise HTTPException(status_code=404, detail="Sesión no encontrada")
@@ -206,13 +232,16 @@ def disconnect_session(session_id: int, db: DBSession = Depends(get_db)):
     sesion.esta_expirada = True
 
     if device:
-        device.estado = EstadoDispositivo.rechazado
+        device.estado = EstadoDispositivo.pendiente
+        if device.direccion_mac:
+            routeros_client.revoke_hotspot_device(device.direccion_mac)
         if device.direccion_ip:
-            routeros_client.block_device(device.direccion_ip)
             routeros_client.remove_bandwidth_limit(device.direccion_ip)
+            routeros_client.unblock_device(device.direccion_ip)
 
     db.commit()
     return {"ok": True, "session_id": session_id, "desconectado": True}
+
 
 
 @router.get("/device/{device_id}/total-time")

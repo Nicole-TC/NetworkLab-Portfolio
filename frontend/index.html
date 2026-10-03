@@ -5,12 +5,29 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NetworkLab — Panel de Administración</title>
-    <link rel="stylesheet" href="style.css" />
-    <!-- Chart.js para gráficos interactivos -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <meta name="description" content="Consola de administración de red. Gestión de dispositivos, sesiones, filtrado web y control de acceso." />
+    <link rel="stylesheet" href="style.css?v=5.5" />
+    <!-- Chart.js local para funcionamiento 100% offline sin depender de internet -->
+    <script src="chart.js"></script>
 </head>
 
 <body>
+<div id="page-loader" class="page-loader">
+    <div class="loader-brand">🛡️ NetworkLab</div>
+    <div class="loader-dots">
+      <span></span><span></span><span></span><span></span>
+    </div>
+    <div class="loader-bar-wrap"><div class="loader-bar"></div></div>
+    <div class="loader-text">Iniciando sistema de red...</div>
+</div>
+<script>
+  window.addEventListener("load", function() {
+    setTimeout(function() {
+      var l = document.getElementById("page-loader");
+      if (l) { l.classList.add("hidden"); setTimeout(function(){ l.remove(); }, 600); }
+    }, 800);
+  });
+</script>
     <!-- Encabezado con Perfil y Logout -->
     <header>
         <div class="header-left">
@@ -18,6 +35,10 @@
             <span class="subtitle">Consola de Administración de Red</span>
         </div>
         <div class="header-right">
+            <div id="mikrotik-status-badge" class="mikrotik-status-badge mikrotik-connecting" title="Comprobando enlace con el router MikroTik...">
+                <span class="mikrotik-status-dot"></span>
+                <span class="mikrotik-status-text" id="mikrotik-status-text">MikroTik: Verificando...</span>
+            </div>
             <div class="user-badge">
                 <span id="admin-user-display">admin</span>
                 <span class="user-role-badge role-admin">ADMIN</span>
@@ -37,8 +58,17 @@
         <button class="tab-btn" data-tab="tab-estadisticas">
             📊 Estadísticas y Gráficos
         </button>
+        <button class="tab-btn" data-tab="tab-archivos">
+            📁 Archivos
+        </button>
+        <button class="tab-btn" data-tab="tab-mensajes">
+            💬 Mensajería
+        </button>
         <button class="tab-btn" data-tab="tab-usuarios">
             👥 Gestión de Usuarios
+        </button>
+        <button class="tab-btn" data-tab="tab-roles">
+            ⚙️ Permisos y Roles
         </button>
     </nav>
 
@@ -65,15 +95,36 @@
                             </select>
                         </label>
                         <button id="btn-sync-devices" class="btn btn-primary">
-                            Sincronizar dispositivos
+                            <span class="btn-icon">🔄</span> Sincronizar dispositivos
                         </button>
                     </div>
                 </div>
-                <div class="table-responsive">
+
+                <!-- Sub-pestañas de Filtrado de Dispositivos -->
+                <div class="subtabs-bar">
+                    <button class="subtab-btn active" data-subtab="online" id="btn-subtab-online">
+                        🟢 Conectados Ahora <span class="subtab-counter" id="badge-count-online">0</span>
+                    </button>
+                    <button class="subtab-btn" data-subtab="pending" id="btn-subtab-pending">
+                        ⏳ Pendientes <span class="subtab-counter" id="badge-count-pending">0</span>
+                    </button>
+                    <button class="subtab-btn" data-subtab="all" id="btn-subtab-all">
+                        🖥️ Todos los Registrados <span class="subtab-counter" id="badge-count-all">0</span>
+                    </button>
+                    <button class="subtab-btn" data-subtab="history" id="btn-subtab-history">
+                        📜 Historial de Sesiones
+                    </button>
+                    <button id="btn-purge-offline" class="btn btn-logout" style="margin-left: auto; padding: 6px 14px; font-size: 0.78rem; border-radius: var(--radius-sm);" title="Elimina de la base de datos los equipos que ya no están conectados">
+                        🧹 Limpiar Inactivos
+                    </button>
+                </div>
+
+                <!-- Tabla Principal de Dispositivos -->
+                <div class="table-responsive" id="contenedor-dispositivos">
                     <table id="tabla-dispositivos">
                         <thead>
                             <tr>
-                                <th>Estado</th>
+                                <th>Presencia / Estado</th>
                                 <th>Nombre</th>
                                 <th>IP</th>
                                 <th>MAC</th>
@@ -87,6 +138,27 @@
                     </table>
                 </div>
                 <p id="mensaje-dispositivos" class="mensaje-vacio"></p>
+
+                <!-- Tabla de Historial de Sesiones (visible al hacer clic en Historial) -->
+                <div class="table-responsive" id="contenedor-historial" style="display: none;">
+                    <table id="tabla-historial-sesiones">
+                        <thead>
+                            <tr>
+                                <th>Equipo</th>
+                                <th>IP</th>
+                                <th>Inicio</th>
+                                <th>Fin</th>
+                                <th>Duración Total</th>
+                                <th>Límite QoS</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Se completa dinámicamente -->
+                        </tbody>
+                    </table>
+                </div>
+                <p id="mensaje-historial" class="mensaje-vacio"></p>
             </section>
 
             <!-- Panel: Sesiones Activas -->
@@ -139,10 +211,28 @@
                             <option value="Juegos">Juegos</option>
                             <option value="Adultos">Adultos</option>
                         </select>
+                        <select id="select-alcance-bloquear" class="select-categoria" style="min-width: 175px;">
+                            <option value="todos">🌐 Toda la red (Admin con Pase Libre)</option>
+                            <option value="rol_nivel_1">👥 Solo Nivel 1 (Estándar / Operativo)</option>
+                            <option value="rol_nivel_2">👥 Solo Nivel 2 (Supervisión / Encargados)</option>
+                            <option value="solo_seleccionados">🎯 Solo PCs seleccionadas...</option>
+                            <option value="todos_excepto">🛡️ Toda la red excepto...</option>
+                        </select>
                         <button id="btn-bloquear-dominio" class="btn btn-rechazar">
                             Bloquear Dominio
                         </button>
                     </div>
+
+                    <!-- Selector dinámico de computadoras para alcance específico -->
+                    <div id="contenedor-seleccion-pcs" style="display: none; margin-top: 10px; margin-bottom: 12px; padding: 14px 16px; background: rgba(0, 240, 255, 0.04); border: 1px dashed rgba(0, 240, 255, 0.3); border-radius: 10px;">
+                        <span id="label-seleccion-pcs" style="font-size: 0.85rem; font-weight: 600; color: #00F0FF; display: block; margin-bottom: 8px;">
+                            Selecciona las computadoras afectadas:
+                        </span>
+                        <div id="lista-checkboxes-pcs" style="display: flex; flex-wrap: wrap; gap: 10px;">
+                            <!-- Checkboxes generados dinámicamente -->
+                        </div>
+                    </div>
+
                     <div class="botones-rapidos-container">
                         <span class="label-rapido">Bloqueo rápido:</span>
                         <button class="btn btn-quick-block" data-domain="youtube.com" data-cat="Streaming">+ YouTube</button>
@@ -160,6 +250,7 @@
                             <tr>
                                 <th>Dominio Bloqueado</th>
                                 <th>Categoría</th>
+                                <th>Alcance</th>
                                 <th>Fecha de Bloqueo</th>
                                 <th>Estado en MikroTik</th>
                                 <th>Acciones</th>
@@ -178,7 +269,7 @@
         <div id="tab-estadisticas" class="tab-content">
             <section class="panel">
                 <div class="panel-header">
-                    <h2>📊 Métricas Generales del Laboratorio</h2>
+                    <h2>📊 Métricas Generales</h2>
                     <button id="btn-refrescar-stats" class="btn btn-primary">
                         Refrescar Estadísticas
                     </button>
@@ -251,7 +342,7 @@
 
                 <!-- Formulario de Creación de Usuario -->
                 <div class="user-form-card">
-                    <h3 style="margin: 0 0 12px; font-size: 0.95rem;">Registrar Nuevo Usuario / Alumno</h3>
+                    <h3 style="margin: 0 0 14px; font-size: 0.95rem; font-weight: 700;">Registrar Nuevo Usuario</h3>
                     <form id="form-crear-usuario" class="user-form-grid">
                         <div class="form-group">
                             <label for="nuevo-usuario-nombre">Usuario *</label>
@@ -266,10 +357,11 @@
                             <input type="text" id="nuevo-usuario-completo" class="input-texto" placeholder="ej: Juan Pérez (PC-02)" />
                         </div>
                         <div class="form-group">
-                            <label for="nuevo-usuario-rol">Rol</label>
+                            <label for="nuevo-usuario-rol">Rol / Nivel</label>
                             <select id="nuevo-usuario-rol" class="select-rol">
-                                <option value="alumno">Alumno / Usuario</option>
-                                <option value="admin">Administrador</option>
+                                <option value="nivel_1">Nivel 1 (Estándar / Operativo)</option>
+                                <option value="nivel_2">Nivel 2 (Supervisión / Docentes)</option>
+                                <option value="admin">Administrador (Pase Libre)</option>
                             </select>
                         </div>
                         <button type="submit" class="btn btn-primary">
@@ -298,13 +390,495 @@
                 <p id="mensaje-usuarios" class="mensaje-vacio"></p>
             </section>
         </div>
+
+        <!-- PESTAÑA 5: Permisos y Roles (Control de Acceso Dinámico) -->
+        <div id="tab-roles" class="tab-content">
+            <section class="panel">
+                <div class="panel-header">
+                    <div>
+                        <h2>⚙️ Configuración y Permisos de Roles</h2>
+                        <p style="color: var(--color-texto-suave); font-size: 0.88rem; margin: 4px 0 0;">
+                            Define las políticas de red por defecto para cada nivel. Al aprobar una estación de trabajo, heredará automáticamente estos valores o podrás personalizarla de forma individual.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="roles-grid">
+                    <!-- Tarjeta: Nivel 1 -->
+                    <div class="role-card" id="card-rol-nivel1">
+                        <div class="role-card-header">
+                            <span class="user-role-badge role-nivel1" style="font-size: 0.85rem; padding: 4px 12px;">NIVEL 1</span>
+                            <span class="role-card-scope">Estándar / Operativo</span>
+                        </div>
+                        <h3 style="margin: 0; font-size: 1.15rem; color: #F1F5F9;">Alumnos / Trabajadores / Clientes</h3>
+                        <p style="margin: 0; font-size: 0.85rem; color: var(--color-texto-suave); line-height: 1.5;">
+                            Aplica para los puestos estándar del entorno. Diseñado para un uso controlado y seguro con filtrado y límite de sesión.
+                        </p>
+
+                        <form id="form-politica-nivel1" class="role-policy-form">
+                            <div class="form-group">
+                                <label for="pol-tiempo-nivel1">Tiempo por Defecto (Minutos)</label>
+                                <input type="number" id="pol-tiempo-nivel1" min="0" max="1440" class="input-texto" placeholder="0 para ilimitado" required />
+                                <small style="color: var(--color-texto-suave); font-size: 0.75rem;">Ej: 120 min. Ingresa 0 para navegación ilimitada.</small>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="pol-vel-nivel1">Velocidad QoS de Navegación</label>
+                                <select id="pol-vel-nivel1" class="select-velocidad">
+                                    <option value="0">⚡ Ilimitada</option>
+                                    <option value="2">2 Mbps (Básico)</option>
+                                    <option value="5">5 Mbps (Estándar)</option>
+                                    <option value="10">10 Mbps (Recomendado)</option>
+                                    <option value="20">20 Mbps (Rápido)</option>
+                                    <option value="50">50 Mbps (Alto tráfico)</option>
+                                </select>
+                            </div>
+
+                            <div class="role-toggle-group">
+                                <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                    <input type="checkbox" id="pol-exento-nivel1" />
+                                    <span style="font-size: 0.85rem;">Exento de Filtrado Web</span>
+                                </label>
+                                <small style="color: var(--color-texto-suave); font-size: 0.75rem; display: block; margin-top: 2px;">
+                                    Si está desactivado, aplican las reglas de bloqueo web configuradas.
+                                </small>
+                            </div>
+
+                            <div class="role-toggle-group">
+                                <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                    <input type="checkbox" id="pol-reacceso-nivel1" checked />
+                                    <span style="font-size: 0.85rem;">Permitir solicitar nueva sesión</span>
+                                </label>
+                                <small style="color: var(--color-texto-suave); font-size: 0.75rem; display: block; margin-top: 2px;">
+                                    Muestra el botón en el portal para solicitar reactivación al expirar el tiempo.
+                                </small>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary" style="margin-top: 10px; width: 100%;">
+                                💾 Guardar Política Nivel 1
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Tarjeta: Nivel 2 -->
+                    <div class="role-card" id="card-rol-nivel2">
+                        <div class="role-card-header">
+                            <span class="user-role-badge role-nivel2" style="font-size: 0.85rem; padding: 4px 12px;">NIVEL 2</span>
+                            <span class="role-card-scope">Supervisión / Avanzado</span>
+                        </div>
+                        <h3 style="margin: 0; font-size: 1.15rem; color: #F1F5F9;">Docentes / Jefes de Área / Encargados</h3>
+                        <p style="margin: 0; font-size: 0.85rem; color: var(--color-texto-suave); line-height: 1.5;">
+                            Aplica para profesores, facilitadores o encargados. Diseñado para conexión fluida y continua sin cortes imprevistos.
+                        </p>
+
+                        <form id="form-politica-nivel2" class="role-policy-form">
+                            <div class="form-group">
+                                <label for="pol-tiempo-nivel2">Tiempo por Defecto (Minutos)</label>
+                                <input type="number" id="pol-tiempo-nivel2" min="0" max="1440" class="input-texto" placeholder="0 para ilimitado" required />
+                                <small style="color: var(--color-texto-suave); font-size: 0.75rem;">0 = Sesión continua sin límite de tiempo.</small>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="pol-vel-nivel2">Velocidad QoS de Navegación</label>
+                                <select id="pol-vel-nivel2" class="select-velocidad">
+                                    <option value="0">⚡ Ilimitada (Sin restricción)</option>
+                                    <option value="10">10 Mbps</option>
+                                    <option value="20">20 Mbps</option>
+                                    <option value="50">50 Mbps</option>
+                                </select>
+                            </div>
+
+                            <div class="role-toggle-group">
+                                <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                    <input type="checkbox" id="pol-exento-nivel2" checked />
+                                    <span style="font-size: 0.85rem;">Exento de Filtrado Web</span>
+                                </label>
+                                <small style="color: var(--color-texto-suave); font-size: 0.75rem; display: block; margin-top: 2px;">
+                                    Navega libre de restricciones web salvo que se aplique una regla explícita.
+                                </small>
+                            </div>
+
+                            <div class="role-toggle-group">
+                                <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                    <input type="checkbox" id="pol-reacceso-nivel2" checked />
+                                    <span style="font-size: 0.85rem;">Permitir solicitar nueva sesión</span>
+                                </label>
+                                <small style="color: var(--color-texto-suave); font-size: 0.75rem; display: block; margin-top: 2px;">
+                                    Habilitado por defecto para estaciones Nivel 2.
+                                </small>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary" style="margin-top: 10px; width: 100%;">
+                                💾 Guardar Política Nivel 2
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Tarjeta: Administrador (Pase Libre Inmutable) -->
+                    <div class="role-card role-card-admin" id="card-rol-admin">
+                        <div class="role-card-header">
+                            <span class="user-role-badge role-admin" style="font-size: 0.85rem; padding: 4px 12px;">ADMIN</span>
+                            <span class="role-card-scope" style="color: #FCD34D;">🛡️ Pase Libre Permanente</span>
+                        </div>
+                        <h3 style="margin: 0; font-size: 1.15rem; color: #FCD34D;">Estación del Administrador</h3>
+                        <p style="margin: 0; font-size: 0.85rem; color: var(--color-texto-suave); line-height: 1.5;">
+                            Tu equipo de control cuenta con inmunidad absoluta en la infraestructura de MikroTik. Ninguna política o bloqueo puede restringirte.
+                        </p>
+
+                        <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; font-size: 0.85rem;">
+                            <div style="display: flex; align-items: center; gap: 8px; color: #FDE68A;">
+                                <span>⚡</span> <strong>Velocidad:</strong> 100% de la red sin cola Simple Queue.
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px; color: #FDE68A;">
+                                <span>⏳</span> <strong>Tiempo de Conexión:</strong> Permanente y sin expiración.
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px; color: #FDE68A;">
+                                <span>🌐</span> <strong>Filtrado Web:</strong> Bypass DNS directo a Google 8.8.8.8.
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px; color: #FDE68A;">
+                                <span>🔒</span> <strong>Firewall MikroTik:</strong> Regla prioritaria ACCEPT incondicional.
+                            </div>
+                        </div>
+
+                        <div style="margin-top: auto; padding: 10px 14px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; font-size: 0.8rem; color: #6EE7B7; text-align: center;">
+                            ✓ Blindaje de Pase Libre Activo en RouterOS
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- PESTAÑA 6: Materiales y Archivos Compartidos -->
+        <div id="tab-archivos" class="tab-content">
+            <section class="panel">
+                <div class="panel-header">
+                    <div>
+                        <h2>📁 Materiales y Archivos del Laboratorio</h2>
+                        <p style="color: var(--color-texto-suave); font-size: 0.88rem; margin: 4px 0 0;">
+                            Sube guías prácticas, PDFs, software o archivos para la clase. Los puestos autorizados podrán descargarlos directamente desde su portal sin consumir internet externo.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Formulario de Subida -->
+                <div class="user-form-card">
+                    <h3 style="margin: 0 0 14px; font-size: 0.95rem; font-weight: 700; color: #F1F5F9;">
+                        📤 Subir Nuevo Archivo para la Red
+                    </h3>
+                    <form id="form-subir-archivo" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; align-items: flex-end;">
+                        <div class="form-group" style="grid-column: span 2;">
+                            <label for="input-archivo-file" style="display: block; margin-bottom: 6px; font-weight: 600; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);">
+                                Seleccionar Archivo (PDF, ZIP, DOCX, TXT, etc.) *
+                            </label>
+                            <label class="upload-dropzone" for="input-archivo-file" id="dropzone-archivo">
+                                <input type="file" id="input-archivo-file" required accept=".pdf,.zip,.docx,.txt,.png,.jpg,.jpeg,.xlsx,.pptx" />
+                                <div class="upload-icon-box">
+                                    <svg class="upload-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                        <polyline points="17 8 12 3 7 8"></polyline>
+                                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                                    </svg>
+                                </div>
+                                <div class="upload-text-wrap">
+                                    <div class="upload-headline">
+                                        <span class="upload-btn-fake">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                            Elegir Archivo
+                                        </span>
+                                        <span class="upload-label-main">o arrastra y suelta tu archivo aquí</span>
+                                    </div>
+                                    <span class="upload-label-sub">Soporta PDF, ZIP, DOCX, TXT, PNG, JPG • Límite máximo: 50 MB</span>
+                                    <div class="upload-filename-row">
+                                        <span class="upload-filename-status-icon">📎</span>
+                                        <span class="upload-filename" id="upload-filename-display">Ningún archivo seleccionado</span>
+                                    </div>
+                                </div>
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label for="input-archivo-desc">Descripción / Asignatura</label>
+                            <input type="text" id="input-archivo-desc" class="input-texto" placeholder="ej: Guía Práctica 02 - Redes" />
+                        </div>
+                        <div class="form-group">
+                            <label for="select-archivo-alcance">Destinatarios / Alcance</label>
+                            <select id="select-archivo-alcance" class="select-rol">
+                                <option value="todos">🌐 Toda la Red (Todos los niveles)</option>
+                                <option value="nivel_1">👥 Solo Nivel 1 (Alumnos / Operativo)</option>
+                                <option value="nivel_2">👥 Solo Nivel 2 (Docentes / Supervisión)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <button type="submit" class="btn btn-primary btn-share-file" id="btn-submit-archivo" style="width: 100%;">
+                                📤 Compartir en Red
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Tabla de Archivos Compartidos -->
+                <div class="table-responsive">
+                    <table id="tabla-archivos">
+                        <thead>
+                            <tr>
+                                <th>Nombre del Archivo</th>
+                                <th>Descripción</th>
+                                <th>Tamaño</th>
+                                <th>Alcance</th>
+                                <th>Fecha de Subida</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Se completa dinámicamente -->
+                        </tbody>
+                    </table>
+                </div>
+                <p id="mensaje-archivos" class="mensaje-vacio"></p>
+            </section>
+        </div>
+
+        <!-- PESTAÑA 7: Mensajería y Notificaciones en Red -->
+        <div id="tab-mensajes" class="tab-content">
+            <section class="panel">
+                <div class="panel-header">
+                    <div>
+                        <h2>💬 Mensajería y Notificaciones en Red (Broadcast)</h2>
+                        <p style="color: var(--color-texto-suave); font-size: 0.88rem; margin: 4px 0 0;">
+                            Envía anuncios en tiempo real a las pantallas de las estaciones de trabajo del aula o empresa.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Formulario de Emisión de Mensaje -->
+                <div class="user-form-card">
+                    <h3 style="margin: 0 0 14px; font-size: 0.95rem; font-weight: 700; color: #F1F5F9;">
+                        📢 Emitir Nuevo Comunicado
+                    </h3>
+                    <form id="form-enviar-mensaje">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 14px;">
+                            <div class="form-group">
+                                <label for="input-mensaje-titulo">Título del Anuncio *</label>
+                                <input type="text" id="input-mensaje-titulo" class="input-texto" placeholder="ej: Fin de la clase en 10 minutos" required />
+                            </div>
+                            <div class="form-group">
+                                <label for="select-mensaje-tipo">Tipo de Prioridad</label>
+                                <select id="select-mensaje-tipo" class="select-rol">
+                                    <option value="info">ℹ️ Informativo (Azul / Normal)</option>
+                                    <option value="aviso">⚠️ Aviso Importante (Ámbar / Recordatorio)</option>
+                                    <option value="urgente">🚨 Alerta Urgente (Rojo / Atención inmediata)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="select-mensaje-alcance">Destinatarios</label>
+                                <select id="select-mensaje-alcance" class="select-rol">
+                                    <option value="todos">🌐 Toda la Red (Todos los puestos)</option>
+                                    <option value="nivel_1">👥 Solo Nivel 1 (Alumnos / Operativo)</option>
+                                    <option value="nivel_2">👥 Solo Nivel 2 (Docentes / Encargados)</option>
+                                    <option value="dispositivo">🎯 Estación puntual...</option>
+                                </select>
+                            </div>
+                            <div class="form-group" id="grupo-mensaje-dispositivo" style="display: none;">
+                                <label for="select-mensaje-dispositivo">Seleccionar Estación</label>
+                                <select id="select-mensaje-dispositivo" class="select-rol">
+                                    <!-- Se completa con PCs conectadas -->
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: 14px;">
+                            <label for="input-mensaje-contenido">Mensaje / Instrucciones *</label>
+                            <textarea id="input-mensaje-contenido" class="input-texto" rows="3" placeholder="Escribe el mensaje que verán las estaciones en su portal..." required style="resize: vertical;"></textarea>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 8px;">
+                            📢 Enviar Comunicado a la Red
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Historial de Comunicados -->
+                <div class="table-responsive">
+                    <table id="tabla-mensajes">
+                        <thead>
+                            <tr>
+                                <th>Fecha / Hora</th>
+                                <th>Prioridad</th>
+                                <th>Alcance</th>
+                                <th>Título y Contenido</th>
+                                <th>Estado</th>
+                                <th>Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Se completa dinámicamente -->
+                        </tbody>
+                    </table>
+                </div>
+                <p id="mensaje-mensajes" class="mensaje-vacio"></p>
+            </section>
+        </div>
     </main>
+
+    <!-- Modal de Configuración / Edición de Dispositivo -->
+    <div id="modal-config-dispositivo" class="modal-backdrop" style="display: none;">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 id="modal-config-titulo">⚙️ Configurar Dispositivo</h3>
+                <button type="button" class="btn-cerrar-modal" id="btn-cerrar-modal-config">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-info-dispositivo" id="modal-info-tags"></div>
+                <form id="form-config-dispositivo">
+                    <input type="hidden" id="modal-config-dev-id" />
+                    <div class="form-group">
+                        <label for="modal-config-nombre">Nombre / Identificador de la PC</label>
+                        <input type="text" id="modal-config-nombre" class="input-texto" placeholder="ej: DESKTOP-01 (Mesa 3)" />
+                    </div>
+                    <div class="form-group">
+                        <label for="modal-config-rol">Nivel de Acceso / Rol del Equipo</label>
+                        <select id="modal-config-rol" class="select-velocidad" style="width: 100%;">
+                            <option value="nivel_1">Nivel 1 (Estándar: Alumnos / Trabajadores / Clientes)</option>
+                            <option value="nivel_2">Nivel 2 (Supervisión: Docentes / Encargados de Área)</option>
+                        </select>
+                        <small style="color: var(--color-texto-suave); font-size: 0.78rem;">Al cambiar el nivel se sugieren automáticamente tiempo y velocidad recomendados.</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="modal-config-tiempo">Tiempo Límite de Sesión (Minutos)</label>
+                        <input type="number" min="1" id="modal-config-tiempo" class="input-texto" placeholder="Dejar vacío para Ilimitado" />
+                        <small style="color: var(--color-texto-suave); font-size: 0.78rem;">Dejá en blanco si querés sesión sin límite de tiempo (Ilimitado ∞).</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="modal-config-velocidad">Límite de Ancho de Banda (QoS MikroTik)</label>
+                        <select id="modal-config-velocidad" class="select-velocidad" style="width: 100%;">
+                            <option value="">Velocidad Ilimitada</option>
+                            <option value="2">2 Mbps (Básico)</option>
+                            <option value="5">5 Mbps (Estándar)</option>
+                            <option value="10">10 Mbps (Rápido)</option>
+                            <option value="20">20 Mbps (Alto)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="modal-config-filtro">Políticas de Filtrado Web</label>
+                        <select id="modal-config-filtro" class="select-velocidad" style="width: 100%;">
+                            <option value="false">🛡️ Filtrado Activo (Bloquear sitios restringidos)</option>
+                            <option value="true">🔓 Exento del Filtro (Pase Libre - Navegación total)</option>
+                        </select>
+                        <small style="color: var(--color-texto-suave); font-size: 0.78rem;">Si está exento, esta PC podrá acceder a YouTube y sitios bloqueados.</small>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn-logout" id="btn-cancelar-modal-config">Cancelar</button>
+                        <button type="submit" class="btn btn-primary" id="btn-guardar-modal-config">Guardar Cambios</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 
     <footer>
         <span id="estado-conexion">Conectado al backend</span>
     </footer>
 
-    <script src="app.js"></script>
+    <!-- Canvas de red animado en el fondo -->
+    <canvas id="network-canvas" aria-hidden="true"></canvas>
+
+    <script src="app.js?v=5.5"></script>
+    <script>
+    // ── NetworkCanvas: malla de nodos de red animada en el fondo ──
+    (function() {
+        const canvas = document.getElementById('network-canvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        let W, H, nodes = [], animFrame;
+
+        const COLORS = ['rgba(139,92,246,', 'rgba(236,72,153,', 'rgba(251,146,60,', 'rgba(0,217,255,'];
+        const NODE_COUNT = 55;
+        const CONNECT_DIST = 160;
+        const NODE_SPEED = 0.25;
+
+        function resize() {
+            W = canvas.width  = window.innerWidth;
+            H = canvas.height = window.innerHeight;
+        }
+
+        function randomNode() {
+            const c = COLORS[Math.floor(Math.random() * COLORS.length)];
+            return {
+                x: Math.random() * W,
+                y: Math.random() * H,
+                vx: (Math.random() - 0.5) * NODE_SPEED,
+                vy: (Math.random() - 0.5) * NODE_SPEED,
+                r: 1.5 + Math.random() * 2,
+                color: c,
+                pulse: Math.random() * Math.PI * 2,
+                pulseSpeed: 0.02 + Math.random() * 0.02
+            };
+        }
+
+        function init() {
+            resize();
+            nodes = Array.from({ length: NODE_COUNT }, randomNode);
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, W, H);
+
+            // Conexiones entre nodos cercanos
+            for (let i = 0; i < nodes.length; i++) {
+                for (let j = i + 1; j < nodes.length; j++) {
+                    const dx = nodes[i].x - nodes[j].x;
+                    const dy = nodes[i].y - nodes[j].y;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    if (dist < CONNECT_DIST) {
+                        const alpha = (1 - dist / CONNECT_DIST) * 0.35;
+                        ctx.beginPath();
+                        ctx.moveTo(nodes[i].x, nodes[i].y);
+                        ctx.lineTo(nodes[j].x, nodes[j].y);
+                        ctx.strokeStyle = nodes[i].color + alpha + ')';
+                        ctx.lineWidth = 0.8;
+                        ctx.stroke();
+                    }
+                }
+            }
+
+            // Nodos
+            nodes.forEach(n => {
+                n.pulse += n.pulseSpeed;
+                const pulseFactor = 0.5 + 0.5 * Math.sin(n.pulse);
+                const r = n.r * (0.85 + 0.35 * pulseFactor);
+                const alpha = 0.4 + 0.5 * pulseFactor;
+
+                ctx.beginPath();
+                ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+                ctx.fillStyle = n.color + alpha + ')';
+                ctx.fill();
+
+                // Halo sutil
+                ctx.beginPath();
+                ctx.arc(n.x, n.y, r * 2.5, 0, Math.PI * 2);
+                ctx.fillStyle = n.color + (alpha * 0.12) + ')';
+                ctx.fill();
+
+                // Movimiento
+                n.x += n.vx;
+                n.y += n.vy;
+                if (n.x < -20 || n.x > W + 20) n.vx *= -1;
+                if (n.y < -20 || n.y > H + 20) n.vy *= -1;
+            });
+
+            animFrame = requestAnimationFrame(draw);
+        }
+
+        init();
+        draw();
+        window.addEventListener('resize', () => { resize(); });
+
+        // Pausa cuando no es visible (ahorro de rendimiento)
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) { cancelAnimationFrame(animFrame); }
+            else { draw(); }
+        });
+    })();
+    </script>
 </body>
 
 </html>

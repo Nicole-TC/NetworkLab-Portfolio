@@ -132,7 +132,13 @@ def crear_usuario(
             detail="El nombre de usuario ya existe",
         )
 
-    rol_enum = RolUsuario.admin if datos.rol.lower() == "admin" else RolUsuario.alumno
+    rol_input = (datos.rol or "nivel_1").lower().strip()
+    if rol_input == "admin":
+        rol_enum = RolUsuario.admin
+    elif rol_input in ("nivel_2", "docente"):
+        rol_enum = RolUsuario.nivel_2
+    else:
+        rol_enum = RolUsuario.nivel_1
 
     nuevo_usuario = Usuario(
         nombre_usuario=nombre_limpio,
