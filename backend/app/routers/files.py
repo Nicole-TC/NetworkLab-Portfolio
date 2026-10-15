@@ -50,8 +50,19 @@ def list_files(rol: str | None = None, db: Session = Depends(get_db)):
 @router.post("/upload")
 def upload_file_json(data: ArchivoSubidaJSON, db: Session = Depends(get_db)):
     """Sube un archivo codificado en Base64 sin depender de librerías externas."""
-    if not data.nombre_original.strip():
+    nombre_limpio = data.nombre_original.strip()
+    if not nombre_limpio:
         raise HTTPException(status_code=400, detail="El nombre del archivo es obligatorio")
+
+    # Validación de unicidad: No se permite subir dos archivos con el mismo nombre y misma extensión.
+    # El único caso en el que pueden compartir el mismo nombre base es si tienen distinta extensión (ej. guia.pdf y guia.zip).
+    existente = db.query(ArchivoCompartido).filter(ArchivoCompartido.nombre_original.ilike(nombre_limpio)).first()
+    if existente:
+        base, ext = os.path.splitext(nombre_limpio)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ya existe un archivo compartido con el nombre exacto '{nombre_limpio}'. Solo puedes usar el mismo nombre ('{base}') si tiene una extensión diferente (ej: {base}.zip o {base}.py)."
+        )
 
     raw_b64 = data.contenido_base64
     if "," in raw_b64:
@@ -106,6 +117,37 @@ def download_file(file_id: int, db: Session = Depends(get_db)):
         filename=archivo.nombre_original,
         media_type=archivo.tipo_mime or "application/octet-stream",
     )
+
+
+@router.get("/{file_id}/view")
+def view_file_inline(file_id: int, db: Session = Depends(get_db)):
+    """Sirve el archivo para visualización directa en el navegador (Content-Disposition: inline)."""
+    archivo = db.query(ArchivoCompartido).filter(ArchivoCompartido.id == file_id).first()
+    if not archivo:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+
+    file_path = os.path.join(UPLOAD_DIR, archivo.nombre_archivo)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="El archivo físico no se encuentra en el servidor")
+
+    # Mapeo preciso de tipos MIME para visualización en navegador
+    mime = archivo.tipo_mime or "application/octet-stream"
+    ext = os.path.splitext(archivo.nombre_original)[1].lower()
+    if ext in [".jpg", ".jpeg"]:
+        mime = "image/jpeg"
+    elif ext == ".png":
+        mime = "image/png"
+    elif ext == ".webp":
+        mime = "image/webp"
+    elif ext == ".gif":
+        mime = "image/gif"
+    elif ext == ".pdf":
+        mime = "application/pdf"
+    elif ext in [".txt", ".log", ".csv", ".json", ".py", ".md"]:
+        mime = "text/plain; charset=utf-8"
+
+    headers = {"Content-Disposition": f'inline; filename="{archivo.nombre_original}"'}
+    return FileResponse(path=file_path, media_type=mime, headers=headers)
 
 
 @router.delete("/{file_id}")

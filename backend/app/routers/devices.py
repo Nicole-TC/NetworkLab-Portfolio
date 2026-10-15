@@ -1,3 +1,4 @@
+import subprocess
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,18 +13,56 @@ from app import routeros_client
 router = APIRouter(prefix="/devices", tags=["devices"])
 
 
+def check_ip_ping(ip: str) -> bool:
+    """Verifica si la IP responde a ping (ICMP) o arping en la red en tiempo real."""
+    if not ip or ip.strip() in ("127.0.0.1", "localhost", "::1"):
+        return True
+    clean_ip = ip.strip()
+    try:
+        res = subprocess.run(
+            ["ping", "-c", "1", "-W", "1", clean_ip],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=1.2,
+        )
+        if res.returncode == 0:
+            return True
+    except Exception:
+        pass
+
+    try:
+        res_arp = subprocess.run(
+            ["arping", "-c", "1", "-w", "1", clean_ip],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=1.2,
+        )
+        if res_arp.returncode == 0:
+            return True
+    except Exception:
+        pass
+
+    return False
+
+
+_last_exempt_cache: tuple | None = None
+
+
 @router.post("/sync")
 def sync_devices(db: Session = Depends(get_db)):
     """
     Consulta los leases DHCP del router y da de alta o actualiza los dispositivos.
+    - Verifica presencia física real (Bridge/Wi-Fi/Ping/ARPing) para no revivir dispositivos desconectados.
     - La consola de administración se auto-aprueba y protege.
     - Los dispositivos de alumnos en DHCP que no tengan sesión activa pasan
       a estado 'pendiente' para aparecer de inmediato en la pestaña de Pendientes.
-    - Asegura que no queden bloqueados en address-lists para permitir el portal cautivo.
+    - Cierra sesiones automáticamente si el dispositivo se desconecta de la red física.
     """
+    global _last_exempt_cache
     try:
         leases = routeros_client.get_dhcp_leases()
         active_macs = routeros_client.get_hotspot_active_macs()
+        real_active_macs = routeros_client.get_mikrotik_active_network_macs()
         nuevos = 0
         admin_macs = settings.admin_mac_list
 
@@ -34,10 +73,14 @@ def sync_devices(db: Session = Depends(get_db)):
 
             mac_norm = mac.strip().upper()
             es_admin = mac_norm in admin_macs
-            esta_activo_red = es_admin or (mac_norm in active_macs)
+            is_physically_active = es_admin or (mac_norm in real_active_macs) or check_ip_ping(lease.get("ip_address"))
 
             device = db.query(Dispositivo).filter(Dispositivo.direccion_mac == mac).first()
             if device is None:
+                # Solo dar de alta nuevos dispositivos si son la consola admin o tienen presencia activa real
+                if not (es_admin or is_physically_active):
+                    continue
+
                 estado_inicial = EstadoDispositivo.aprobado if es_admin else EstadoDispositivo.pendiente
                 nombre_host = lease["hostname"] or ("Administrador" if es_admin else "")
 
@@ -48,30 +91,92 @@ def sync_devices(db: Session = Depends(get_db)):
                     nombre_host=nombre_host,
                     estado=estado_inicial,
                     rol=rol_inicial,
+                    ultima_actividad=datetime.now() if is_physically_active else None,
                 )
                 db.add(device)
                 nuevos += 1
             else:
                 device.direccion_ip = lease["ip_address"]
-                device.nombre_host = lease["hostname"] or device.nombre_host
-                if esta_activo_red:
-                    device.ultima_actividad = datetime.now()
+                if lease.get("hostname"):
+                    device.nombre_host = lease["hostname"]
+
+                # Solo actualizar última actividad si el equipo está REALMENTE activo y respondiendo
+                if is_physically_active:
+                    ahora = datetime.now()
+                    device.ultima_actividad = ahora
+                    sesion = (
+                        db.query(Sesion)
+                        .filter(Sesion.dispositivo_id == device.id, Sesion.fin.is_(None))
+                        .order_by(Sesion.inicio.desc())
+                        .first()
+                    )
+                    if sesion:
+                        ultimo = sesion.ultimo_pulso or sesion.inicio
+                        delta = (ahora - ultimo).total_seconds()
+                        if 0 < delta <= 90:
+                            sesion.tiempo_activo_segundos = (getattr(sesion, "tiempo_activo_segundos", 0) or 0) + int(delta)
+                        elif delta > 90:
+                            sesion.tiempo_activo_segundos = (getattr(sesion, "tiempo_activo_segundos", 0) or 0) + 5
+                        sesion.ultimo_pulso = ahora
+                    elif es_admin or device.estado == EstadoDispositivo.aprobado:
+                        sesion = Sesion(
+                            dispositivo_id=device.id,
+                            direccion_ip=device.direccion_ip,
+                            inicio=ahora,
+                            ultimo_pulso=ahora,
+                            tiempo_activo_segundos=10,
+                            esta_expirada=False,
+                        )
+                        db.add(sesion)
 
                 if es_admin:
                     device.rol = "admin"
                     if device.estado != EstadoDispositivo.aprobado:
                         device.estado = EstadoDispositivo.aprobado
+                    if lease.get("ip_address"):
+                        try:
+                            routeros_client.make_dhcp_lease_static(
+                                mac_address=mac,
+                                ip_address=lease["ip_address"],
+                                comment="NetworkLab-ADMIN",
+                            )
+                        except Exception:
+                            pass
                 else:
+                    # Si el equipo de alumno no está físicamente activo, verificar y cerrar sesión colgada
+                    if not is_physically_active:
+                        sesion_colgada = (
+                            db.query(Sesion)
+                            .filter(Sesion.dispositivo_id == device.id, Sesion.fin.is_(None))
+                            .first()
+                        )
+                        if sesion_colgada:
+                            ahora_cierre = datetime.now()
+                            ultimo_p = sesion_colgada.ultimo_pulso or sesion_colgada.inicio
+                            if (ahora_cierre - ultimo_p).total_seconds() >= 45:
+                                sesion_colgada.fin = sesion_colgada.ultimo_pulso or ahora_cierre
+                                sesion_colgada.esta_expirada = True
+                                device.estado = EstadoDispositivo.pendiente
+                                if device.direccion_mac:
+                                    try:
+                                        routeros_client.revoke_hotspot_device(device.direccion_mac)
+                                    except Exception:
+                                        pass
+                                if device.direccion_ip:
+                                    try:
+                                        routeros_client.remove_bandwidth_limit(device.direccion_ip)
+                                    except Exception:
+                                        pass
+
                     # Si el equipo no es admin y NO tiene una sesión activa abierta,
                     # debe figurar en 'pendiente' para que el docente pueda autorizarlo.
                     sesion_activa = any(s.fin is None for s in device.sesiones)
                     if not sesion_activa and device.estado != EstadoDispositivo.aprobado:
                         device.estado = EstadoDispositivo.pendiente
 
-
         db.commit()
 
-        # Sincronizar dispositivos exentos (Administradores y Whitelist) con MikroTik
+        # Sincronizar dispositivos exentos (Administradores y Whitelist) con MikroTik solo ante cambios
         try:
             exempt_ips = set()
             admin_ips = set()
@@ -84,9 +189,13 @@ def sync_devices(db: Session = Depends(get_db)):
                 elif getattr(dev, "exento_filtro", False) or getattr(dev, "rol", "") == "nivel_2":
                     if dev.direccion_ip:
                         exempt_ips.add(dev.direccion_ip)
-            routeros_client.sync_exempt_devices(list(exempt_ips))
-            if admin_ips:
-                routeros_client.ensure_admin_bypass(list(admin_ips))
+
+            current_cache = (frozenset(admin_ips), frozenset(exempt_ips))
+            if current_cache != _last_exempt_cache:
+                routeros_client.sync_exempt_devices(list(exempt_ips))
+                if admin_ips:
+                    routeros_client.ensure_admin_bypass(list(admin_ips))
+                _last_exempt_cache = current_cache
         except Exception as e:
             print("Nota sincronizando exentos:", e)
 
@@ -94,6 +203,7 @@ def sync_devices(db: Session = Depends(get_db)):
     except Exception as e:
         import traceback
         return {"error": str(e), "traceback": traceback.format_exc()}
+
 
 
 class RenameDeviceRequest(BaseModel):
@@ -120,15 +230,20 @@ def list_devices(estado: EstadoDispositivo | None = None, db: Session = Depends(
 
     admin_macs = settings.admin_mac_list
     ahora = datetime.now()
+    real_active_macs = routeros_client.get_mikrotik_active_network_macs()
     resultado = []
     for d in dispositivos:
         mac_norm = (d.direccion_mac or "").strip().upper()
         es_admin = mac_norm in admin_macs
         sesion_activa_obj = next((s for s in d.sesiones if s.fin is None), None)
         sesion_activa = sesion_activa_obj is not None
-        # Ventana de presencia en línea: si no es admin ni tiene sesión activa, requiere pulso reciente (< 90s)
+
+        # Presencia física real: enlace en switch/bridge MikroTik, ARP activo o respuesta ping
+        esta_presente_red = es_admin or (mac_norm in real_active_macs) or check_ip_ping(d.direccion_ip)
         actividad_reciente = d.ultima_actividad and (ahora - d.ultima_actividad).total_seconds() < 90
-        en_linea = es_admin or sesion_activa or bool(actividad_reciente)
+
+        # Un equipo solo está en línea si es admin o si está REALMENTE presente en la red
+        en_linea = es_admin or (esta_presente_red and (sesion_activa or bool(actividad_reciente)))
 
         usuario_nombre = None
         usuario_username = None
@@ -246,6 +361,17 @@ def approve_device(
         device.estado = EstadoDispositivo.aprobado
         device.limite_velocidad_mbps = bandwidth_limit_mbps
         db.commit()
+
+        # Reservar la IP de forma estática en MikroTik para que sea única y permanente
+        if device.direccion_mac and device.direccion_ip:
+            try:
+                routeros_client.make_dhcp_lease_static(
+                    mac_address=device.direccion_mac,
+                    ip_address=device.direccion_ip,
+                    comment=f"NetworkLab-{device.nombre_host or device.id}",
+                )
+            except Exception as e:
+                print("Nota reservando lease estático al aprobar:", e)
 
         # Sincronizar exentos en MikroTik
         admin_macs = settings.admin_mac_list
@@ -494,10 +620,13 @@ def delete_device(device_id: int, db: Session = Depends(get_db)):
 
 @router.post("/purge-offline")
 def purge_offline_devices(db: Session = Depends(get_db)):
-    """Limpia todos los dispositivos desconectados/inactivos de la base de datos (excepto administradores)."""
+    """
+    Limpia todos los dispositivos físicamente desconectados de la red y de MikroTik.
+    Elimina la concesión DHCP obsoleta en RouterOS para que no vuelvan a revivir.
+    """
     admin_macs = settings.admin_mac_list
-    ahora = datetime.now()
     dispositivos = db.query(Dispositivo).all()
+    real_active_macs = routeros_client.get_mikrotik_active_network_macs()
     eliminados = 0
 
     for d in dispositivos:
@@ -505,11 +634,24 @@ def purge_offline_devices(db: Session = Depends(get_db)):
         if mac_norm in admin_macs or d.rol == "admin":
             continue
 
-        sesion_activa = any(s.fin is None for s in d.sesiones)
-        actividad_reciente = d.ultima_actividad and (ahora - d.ultima_actividad).total_seconds() < 180
-        en_linea = sesion_activa or bool(actividad_reciente)
+        esta_presente = (mac_norm in real_active_macs) or check_ip_ping(d.direccion_ip)
 
-        if not en_linea:
+        if not esta_presente:
+            # 1. Eliminar concesión DHCP remanente en MikroTik para evitar que vuelva a reaparecer
+            try:
+                routeros_client.remove_dhcp_lease_mikrotik(
+                    mac_address=d.direccion_mac, ip_address=d.direccion_ip
+                )
+            except Exception as e:
+                print(f"Nota purgando lease de MikroTik para {d.direccion_ip}: {e}")
+
+            # 2. Desconectar de Hotspot si aún quedara sesión colgada en RouterOS
+            try:
+                routeros_client.kick_hotspot_active(mac_address=d.direccion_mac, ip_address=d.direccion_ip)
+            except Exception:
+                pass
+
+            # 3. Eliminar sesiones y dispositivo en la BD local
             for s in list(d.sesiones):
                 db.delete(s)
             db.delete(d)
@@ -517,6 +659,7 @@ def purge_offline_devices(db: Session = Depends(get_db)):
 
     db.commit()
     return {"ok": True, "purgados": eliminados}
+
 
 
 

@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import Column, Integer, String, Enum, DateTime, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, Enum, DateTime, ForeignKey, Boolean, BigInteger, Date, Text
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -77,6 +77,7 @@ class Sesion(Base):
     fin = Column(DateTime, nullable=True)
     limite_tiempo_minutos = Column(Integer, nullable=True)
     limite_velocidad_mbps = Column(Integer, nullable=True)
+    tiempo_activo_segundos = Column(Integer, default=0, nullable=True)
     esta_expirada = Column(Boolean, default=False, nullable=False)
 
     dispositivo = relationship("Dispositivo", back_populates="sesiones")
@@ -85,16 +86,17 @@ class Sesion(Base):
 
 class DominioBloqueado(Base):
     """
-    Representa un sitio web bloqueado en el laboratorio mediante DNS estático.
+    Representa un sitio web filtrado (Lista Blanca de sitios permitidos en MikroTik).
     Tabla en plural: dominios_bloqueados. Campos en singular.
     """
     __tablename__ = "dominios_bloqueados"
 
     id = Column(Integer, primary_key=True, index=True)
     dominio = Column(String, unique=True, index=True, nullable=False)
-    categoria = Column(String, nullable=True)  # Ej. Streaming, Redes sociales, Juegos
-    alcance = Column(String, default="todos", nullable=True)  # 'todos', 'todos_excepto', 'solo_seleccionados'
+    categoria = Column(String, nullable=True)  # Ej. Educación, Buscadores, Herramientas
+    alcance = Column(String, default="todos", nullable=True)  # 'todos', 'todos_excepto', 'solo_seleccionados', 'rol_nivel_1'
     dispositivos_ids = Column(String, default="", nullable=True)  # IDs separados por coma (ej: "1,2")
+    tipo = Column(String, default="blanca", nullable=True)  # 'blanca' (permitido)
     fecha_creacion = Column(DateTime, default=datetime.now, nullable=False)
     esta_activo = Column(Boolean, default=True, nullable=False)
 
@@ -155,3 +157,100 @@ class MensajeRed(Base):
     creado_por = Column(String, default="admin", nullable=True)
 
 
+class MensajeLectura(Base):
+    """
+    Registro de confirmación de lectura de un comunicado por parte de una estación/dispositivo.
+    """
+    __tablename__ = "mensaje_lecturas"
+
+    id = Column(Integer, primary_key=True, index=True)
+    mensaje_id = Column(Integer, ForeignKey("mensajes_red.id", ondelete="CASCADE"), nullable=False, index=True)
+    direccion_ip = Column(String, nullable=True)
+    direccion_mac = Column(String, nullable=True)
+    nombre_dispositivo = Column(String, nullable=True)
+    leido_en = Column(DateTime, default=datetime.now, nullable=False)
+
+
+class RegistroActividadApp(Base):
+    """
+    Registro histórico y consolidado del tiempo y tráfico que cada dispositivo
+    pasa en aplicaciones online, juegos (ej. Dota 2), streaming, redes y estudio.
+    """
+    __tablename__ = "registro_actividad_app"
+
+    id = Column(Integer, primary_key=True, index=True)
+    dispositivo_id = Column(Integer, ForeignKey("dispositivos.id", ondelete="CASCADE"), nullable=False, index=True)
+    fecha = Column(Date, default=lambda: datetime.now().date(), nullable=False, index=True)
+    categoria = Column(String, nullable=False, index=True)  # 'juegos', 'streaming', 'social', 'estudio', 'general'
+    aplicacion = Column(String, nullable=False)  # 'Dota 2 / Steam', 'YouTube / Streaming', 'Discord / Chat', 'Google Classroom / Estudio', 'Navegación Web'
+    segundos_activos = Column(Integer, default=0, nullable=False)
+    bytes_in = Column(BigInteger, default=0, nullable=False)
+    bytes_out = Column(BigInteger, default=0, nullable=False)
+    ultima_actualizacion = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    dispositivo = relationship("Dispositivo", backref="actividades_app")
+
+
+class ConfiguracionModulo(Base):
+    """
+    Parámetros globales y estado de módulos (ej. aislamiento de grupos activado/desactivado).
+    """
+    __tablename__ = "configuracion_modulos"
+
+    clave = Column(String, primary_key=True, index=True)
+    valor = Column(String, nullable=False)
+    actualizado_en = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+
+class GrupoRed(Base):
+    """
+    Representa un grupo o mesa de trabajo de dispositivos aislados en la red.
+    """
+    __tablename__ = "grupos_red"
+
+    id = Column(Integer, primary_key=True, index=True)
+    nombre = Column(String, nullable=False)
+    color = Column(String, default="#6366f1", nullable=False)
+    esta_activo = Column(Boolean, default=True, nullable=False)
+    permite_archivos_lider = Column(Boolean, default=True, nullable=False)
+    permite_chat_admin = Column(Boolean, default=True, nullable=False)
+    creado_en = Column(DateTime, default=datetime.now, nullable=False)
+
+    miembros = relationship("GrupoMiembro", back_populates="grupo", cascade="all, delete-orphan")
+    mensajes = relationship("MensajeGrupo", back_populates="grupo", cascade="all, delete-orphan")
+
+
+class GrupoMiembro(Base):
+    """
+    Asociación de un dispositivo a un grupo de trabajo, con designación de líder.
+    """
+    __tablename__ = "grupo_miembros"
+
+    id = Column(Integer, primary_key=True, index=True)
+    grupo_id = Column(Integer, ForeignKey("grupos_red.id", ondelete="CASCADE"), nullable=False, index=True)
+    dispositivo_id = Column(Integer, ForeignKey("dispositivos.id", ondelete="CASCADE"), nullable=False, index=True)
+    es_lider = Column(Boolean, default=False, nullable=False)
+
+    grupo = relationship("GrupoRed", back_populates="miembros")
+    dispositivo = relationship("Dispositivo", backref="pertenencia_grupo")
+
+
+class MensajeGrupo(Base):
+    """
+    Mensajes de chat grupales, individuales o con admin para equipos de trabajo.
+    """
+    __tablename__ = "mensajes_grupo"
+
+    id = Column(Integer, primary_key=True, index=True)
+    grupo_id = Column(Integer, ForeignKey("grupos_red.id", ondelete="CASCADE"), nullable=True, index=True)
+    emisor_ip = Column(String, nullable=False)
+    emisor_mac = Column(String, nullable=True)
+    emisor_nombre = Column(String, nullable=False)
+    receptor_ip = Column(String, nullable=True, index=True)  # None = Broadcast grupal, 'admin' = Directo a admin, o IP de destino
+    contenido = Column(Text, nullable=False)
+    archivo_nombre = Column(String, nullable=True)
+    archivo_ruta = Column(String, nullable=True)
+    archivo_tamano = Column(Integer, default=0, nullable=False)
+    creado_en = Column(DateTime, default=datetime.now, nullable=False)
+
+    grupo = relationship("GrupoRed", back_populates="mensajes")

@@ -1,0 +1,1786 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NetworkLab — Documentación Técnica del Proyecto</title>
+    <meta name="description" content="Documentación técnica integral del sistema NetworkLab: módulos, arquitectura, tecnologías y dispositivo MikroTik RouterBOARD 951G-2HnD con visor 3D interactivo en 360° (horizontal y vertical)." />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="stylesheet" href="css/style.css?v=6.0" />
+    <style>
+        /* ════════════════════════════════════════════════════════════════
+           ESTILOS EXCLUSIVOS DE DOC.HTML (DISEÑO PREMIUM Y MODO CLARO)
+           ════════════════════════════════════════════════════════════════ */
+
+        /* Topbar de navegación */
+        .doc-topbar {
+            position: sticky;
+            top: 0;
+            z-index: 200;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 32px;
+            background: rgba(8, 11, 20, 0.92);
+            backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--border-base);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .doc-topbar-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+            color: var(--text-primary);
+            font-weight: 800;
+            font-size: 1.15rem;
+            letter-spacing: -0.02em;
+        }
+
+        .doc-topbar-brand span {
+            background: var(--grad-brand);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .doc-topbar-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .doc-back-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            color: var(--text-primary);
+            border-radius: 10px;
+            padding: 8px 16px;
+            font-size: 0.84rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .doc-back-btn:hover {
+            background: rgba(139, 92, 246, 0.2);
+            border-color: var(--violet-400);
+            color: var(--violet-300);
+            transform: translateX(-3px);
+        }
+
+        .doc-theme-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            color: var(--text-primary);
+            border-radius: 10px;
+            padding: 8px 14px;
+            font-size: 0.84rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .doc-theme-btn:hover {
+            background: rgba(255, 200, 0, 0.12);
+            border-color: rgba(255, 200, 0, 0.4);
+        }
+
+        .doc-wrapper {
+            min-height: 100vh;
+            padding-top: 16px;
+            position: relative;
+        }
+
+        #doc-network-canvas {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+            opacity: 0.45;
+        }
+
+        .doc-content-wrap {
+            position: relative;
+            z-index: 1;
+        }
+
+        /* ── Visor 3D WebGL Three.js MikroTik 360° Real ── */
+        .doc-mikrotik-viewer {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+            width: 100%;
+        }
+
+        .mikrotik-3d-scene {
+            position: relative;
+            width: 100%;
+            max-width: 520px;
+            height: 350px;
+            border-radius: 20px;
+            overflow: hidden;
+            background: radial-gradient(circle at 50% 45%, #111827 0%, #070913 100%);
+            border: 1px solid rgba(0, 217, 255, 0.35);
+            box-shadow:
+                0 0 35px rgba(0, 217, 255, 0.15),
+                0 0 70px rgba(139, 92, 246, 0.14),
+                0 24px 50px rgba(0, 0, 0, 0.7);
+            touch-action: none;
+        }
+
+        #mikrotik-3d-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            cursor: grab;
+        }
+
+        #mikrotik-3d-canvas:active {
+            cursor: grabbing;
+        }
+
+        .mt-3d-overlay-top {
+            position: absolute;
+            top: 12px;
+            left: 14px;
+            right: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .mt-3d-badge {
+            background: rgba(8, 11, 20, 0.85);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(0, 217, 255, 0.4);
+            color: #00D9FF;
+            font-size: 0.73rem;
+            font-weight: 700;
+            padding: 4px 12px;
+            border-radius: 100px;
+            font-family: var(--font-mono);
+            letter-spacing: 0.02em;
+            pointer-events: auto;
+        }
+
+        .mt-3d-icon-btn {
+            pointer-events: auto;
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            color: #F8FAFC;
+            padding: 5px 14px;
+            border-radius: 100px;
+            font-size: 0.73rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .mt-3d-icon-btn:hover {
+            background: rgba(139, 92, 246, 0.3);
+            border-color: var(--violet-400);
+            color: var(--violet-200);
+        }
+
+        .mt-3d-hint {
+            position: absolute;
+            bottom: 12px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .mt-3d-hint span {
+            background: rgba(8, 11, 20, 0.80);
+            backdrop-filter: blur(6px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #94A3B8;
+            font-size: 0.71rem;
+            padding: 3px 14px;
+            border-radius: 100px;
+            font-weight: 500;
+        }
+
+        .mikrotik-3d-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+            max-width: 520px;
+        }
+
+        .mikrotik-ctrl-btn {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            color: var(--text-primary);
+            border-radius: 8px;
+            padding: 6px 12px;
+            font-size: 0.76rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .mikrotik-ctrl-btn:hover {
+            background: rgba(139, 92, 246, 0.22);
+            border-color: var(--violet-400);
+            color: var(--violet-200);
+            transform: translateY(-1px);
+        }
+
+        .mikrotik-ctrl-btn.active-preset {
+            background: rgba(139, 92, 246, 0.35);
+            border-color: var(--violet-400);
+            color: #FFFFFF;
+            box-shadow: 0 0 12px rgba(139, 92, 246, 0.3);
+        }
+
+        .mikrotik-help-text {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            margin: 0;
+            text-align: center;
+            font-weight: 500;
+            max-width: 520px;
+            line-height: 1.5;
+        }
+
+        /* ════════════════════════════════════════════════════════════════
+           REGLAS DE MODO CLARO EXHAUSTIVAS (MÁXIMA LEGIBILIDAD)
+           ════════════════════════════════════════════════════════════════ */
+
+        [data-theme="light"] {
+            color-scheme: light;
+        }
+
+        /* Topbar */
+        [data-theme="light"] .doc-topbar {
+            background: rgba(255, 255, 255, 0.96);
+            border-bottom: 1px solid #E2E8F0;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+        }
+
+        [data-theme="light"] .doc-topbar-brand {
+            color: #0F172A;
+        }
+
+        [data-theme="light"] .doc-back-btn,
+        [data-theme="light"] .doc-theme-btn {
+            background: #FFFFFF;
+            border: 1px solid #CBD5E1;
+            color: #0F172A;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        [data-theme="light"] .doc-back-btn:hover {
+            background: #F8FAFC;
+            border-color: #94A3B8;
+            color: #0F172A;
+        }
+
+        [data-theme="light"] .doc-theme-btn:hover {
+            background: #FEF3C7;
+            border-color: #FCD34D;
+        }
+
+        [data-theme="light"] #doc-network-canvas {
+            opacity: 0.16;
+        }
+
+        /* Hero */
+        [data-theme="light"] .doc-hero {
+            background: linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 50%, #F1F5F9 100%);
+            border: 1px solid #E2E8F0;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+        }
+
+        [data-theme="light"] .doc-hero-badge {
+            background: #EDE9FE;
+            border: 1px solid #C7D2FE;
+            color: #4338CA !important;
+            font-weight: 700;
+        }
+
+        [data-theme="light"] .doc-hero-title {
+            background: linear-gradient(135deg, #0F172A 0%, #4338CA 50%, #0369A1 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            filter: none;
+        }
+
+        [data-theme="light"] .doc-hero-subtitle {
+            color: #334155 !important;
+            font-weight: 500;
+        }
+
+        [data-theme="light"] .doc-tag {
+            background: #FFFFFF;
+            border: 1px solid #CBD5E1;
+            color: #0F172A !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+            font-weight: 600;
+        }
+
+        [data-theme="light"] .doc-tag:hover {
+            background: #EEF2FF;
+            border-color: #A5B4FC;
+            color: #312E81 !important;
+        }
+
+        /* Stats Bar */
+        [data-theme="light"] .doc-stats-bar {
+            background: #FFFFFF;
+            border: 1px solid #E2E8F0;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+        }
+
+        [data-theme="light"] .doc-stat-num {
+            background: linear-gradient(135deg, #4338CA 0%, #D946EF 60%, #EA580C 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        [data-theme="light"] .doc-stat-label {
+            color: #334155 !important;
+            font-weight: 700;
+        }
+
+        /* Sections */
+        [data-theme="light"] .doc-section {
+            background: #FFFFFF;
+            border: 1px solid #E2E8F0;
+            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.04);
+        }
+
+        [data-theme="light"] .doc-section-title {
+            color: #0F172A !important;
+            font-weight: 800;
+        }
+
+        /* MikroTik Section */
+        [data-theme="light"] .doc-mikrotik-section {
+            background: #FFFFFF;
+            border: 1px solid #CBD5E1;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        }
+
+        [data-theme="light"] .doc-specs-title {
+            color: #0369A1 !important;
+            font-weight: 800;
+        }
+
+        [data-theme="light"] .doc-spec-row {
+            border-bottom: 1px solid #F1F5F9;
+        }
+
+        [data-theme="light"] .doc-spec-row:hover {
+            background: #F8FAFC;
+        }
+
+        [data-theme="light"] .doc-spec-key {
+            color: #334155 !important;
+            font-weight: 700;
+        }
+
+        [data-theme="light"] .doc-spec-val {
+            color: #0F172A !important;
+            font-weight: 600;
+        }
+
+        [data-theme="light"] .mikrotik-3d-scene {
+            background: radial-gradient(circle at 50% 45%, #F8FAFC 0%, #E2E8F0 100%);
+            border-color: #CBD5E1;
+            box-shadow:
+                0 8px 30px rgba(0, 0, 0, 0.08),
+                0 0 20px rgba(99, 102, 241, 0.06);
+        }
+
+        [data-theme="light"] .mt-3d-badge {
+            background: rgba(255, 255, 255, 0.94);
+            border-color: #BAE6FD;
+            color: #0369A1;
+        }
+
+        [data-theme="light"] .mt-3d-icon-btn {
+            background: #FFFFFF;
+            border-color: #CBD5E1;
+            color: #0F172A;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        [data-theme="light"] .mt-3d-icon-btn:hover {
+            background: #EEF2FF;
+            border-color: #6366F1;
+            color: #312E81;
+        }
+
+        [data-theme="light"] .mt-3d-hint span {
+            background: rgba(255, 255, 255, 0.90);
+            border-color: #E2E8F0;
+            color: #475569;
+        }
+
+        [data-theme="light"] .mikrotik-ctrl-btn {
+            background: #FFFFFF;
+            border: 1px solid #CBD5E1;
+            color: #0F172A !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            font-weight: 700;
+        }
+
+        [data-theme="light"] .mikrotik-ctrl-btn:hover {
+            background: #EEF2FF;
+            border-color: #6366F1;
+            color: #312E81 !important;
+        }
+
+        [data-theme="light"] .mikrotik-ctrl-btn.active-preset {
+            background: #4F46E5 !important;
+            border-color: #4338CA !important;
+            color: #FFFFFF !important;
+        }
+
+        [data-theme="light"] .mikrotik-help-text {
+            color: #334155 !important;
+            font-weight: 600;
+        }
+
+        /* Arquitectura */
+        [data-theme="light"] .arch-layer-client {
+            background: #F5F3FF;
+            border: 1px solid #DDD6FE;
+        }
+
+        [data-theme="light"] .arch-layer-backend {
+            background: #F0F9FF;
+            border: 1px solid #BAE6FD;
+        }
+
+        [data-theme="light"] .arch-layer-data {
+            background: #FFF7ED;
+            border: 1px solid #FED7AA;
+        }
+
+        [data-theme="light"] .arch-layer-label {
+            color: #0F172A !important;
+            font-weight: 800;
+        }
+
+        [data-theme="light"] .arch-arrow {
+            color: #1E293B !important;
+            font-weight: 700;
+            background: #F1F5F9;
+            border: 1px solid #CBD5E1;
+            border-radius: 100px;
+            padding: 6px 18px;
+            display: inline-block;
+            margin: 8px auto;
+        }
+
+        [data-theme="light"] .arch-item {
+            background: #FFFFFF;
+            border: 1px solid #CBD5E1;
+            color: #0F172A !important;
+            font-weight: 700;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        [data-theme="light"] .arch-item:hover {
+            background: #EEF2FF;
+            border-color: #818CF8;
+        }
+
+        [data-theme="light"] .arch-item small {
+            color: #475569 !important;
+            font-weight: 600;
+        }
+
+        /* Módulos */
+        [data-theme="light"] .doc-module-card {
+            background: #FFFFFF;
+            border: 1px solid #E2E8F0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+        }
+
+        [data-theme="light"] .doc-module-card:hover {
+            border-color: #818CF8;
+            box-shadow: 0 8px 24px rgba(99, 102, 241, 0.08);
+        }
+
+        [data-theme="light"] .doc-module-card h4 {
+            color: #0F172A !important;
+            font-weight: 800;
+        }
+
+        [data-theme="light"] .doc-module-card p {
+            color: #334155 !important;
+            font-size: 0.86rem;
+            line-height: 1.6;
+        }
+
+        [data-theme="light"] .doc-module-tags span {
+            background: #EEF2FF;
+            color: #3730A3 !important;
+            border: 1px solid #C7D2FE;
+            font-weight: 700;
+        }
+
+        /* Stack Tecnológico */
+        [data-theme="light"] .doc-tech-item {
+            background: #FFFFFF;
+            border: 1px solid #E2E8F0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+        }
+
+        [data-theme="light"] .doc-tech-item:hover {
+            border-color: #818CF8;
+            box-shadow: 0 8px 20px rgba(99, 102, 241, 0.08);
+        }
+
+        [data-theme="light"] .doc-tech-name {
+            color: #0F172A !important;
+            font-weight: 800;
+        }
+
+        [data-theme="light"] .doc-tech-desc {
+            color: #334155 !important;
+            font-weight: 500;
+        }
+
+        /* Flujo de Funcionamiento */
+        [data-theme="light"] .doc-flow-step:hover {
+            background: #F8FAFC;
+        }
+
+        [data-theme="light"] .doc-flow-body h4 {
+            color: #0F172A !important;
+            font-weight: 800;
+        }
+
+        [data-theme="light"] .doc-flow-body p {
+            color: #334155 !important;
+            line-height: 1.65;
+        }
+
+        [data-theme="light"] .doc-flow-num {
+            background: linear-gradient(135deg, #4F46E5, #7C3AED);
+            color: #FFFFFF;
+            font-weight: 800;
+        }
+
+        /* Footer */
+        [data-theme="light"] .doc-footer-credits {
+            background: #FFFFFF;
+            border: 1px solid #E2E8F0;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+        }
+
+        [data-theme="light"] .doc-footer-text strong {
+            color: #0F172A !important;
+        }
+
+        [data-theme="light"] .doc-footer-text span {
+            color: #475569 !important;
+        }
+
+        [data-theme="light"] .doc-footer-version {
+            color: #4338CA !important;
+            font-weight: 800;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="doc-network-canvas" aria-hidden="true"></canvas>
+
+    <!-- ── Top Navigation Bar ── -->
+    <nav class="doc-topbar" role="navigation" aria-label="Barra de navegación de documentación">
+        <a href="index.html" class="doc-topbar-brand" title="Volver al panel principal">
+            🛡️ <span>NetworkLab</span>
+        </a>
+        <div class="doc-topbar-actions">
+            <button id="doc-theme-toggle" class="doc-theme-btn" title="Cambiar tema claro u oscuro">
+                <span id="doc-theme-icon">☀️</span>
+                <span id="doc-theme-label">Modo Claro</span>
+            </button>
+            <a href="index.html" class="doc-back-btn" title="Volver al panel de administración">
+                ← Volver al Panel
+            </a>
+        </div>
+    </nav>
+
+    <div class="doc-wrapper">
+        <div class="doc-content-wrap">
+            <main class="doc-page" id="doc-main">
+
+                <!-- ══ HERO ══ -->
+                <div class="doc-hero">
+                    <div class="doc-hero-bg-anim" aria-hidden="true" id="doc-hero-particles"></div>
+                    <div class="doc-hero-content">
+                        <div class="doc-hero-badge">📡 Documentación Técnica Integral</div>
+                        <h1 class="doc-hero-title">NetworkLab</h1>
+                        <p class="doc-hero-subtitle">
+                            Sistema Inteligente de Gestión, Monitoreo y Control de Red para Laboratorios Educativos
+                        </p>
+                        <div class="doc-hero-tags">
+                            <span class="doc-tag">🐍 Python 3.11</span>
+                            <span class="doc-tag">⚡ FastAPI</span>
+                            <span class="doc-tag">🗄️ SQLite</span>
+                            <span class="doc-tag">🌐 RouterOS API</span>
+                            <span class="doc-tag">📡 MikroTik RB951G-2HnD</span>
+                            <span class="doc-tag">💻 Vanilla JS</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ══ STATS BAR ══ -->
+                <div class="doc-stats-bar">
+                    <div class="doc-stat-item">
+                        <span class="doc-stat-num">9</span>
+                        <span class="doc-stat-label">Módulos</span>
+                    </div>
+                    <div class="doc-stat-item">
+                        <span class="doc-stat-num">5</span>
+                        <span class="doc-stat-label">Puertos Gigabit</span>
+                    </div>
+                    <div class="doc-stat-item">
+                        <span class="doc-stat-num">REST</span>
+                        <span class="doc-stat-label">API Backend</span>
+                    </div>
+                    <div class="doc-stat-item">
+                        <span class="doc-stat-num">L7</span>
+                        <span class="doc-stat-label">Filtrado Web</span>
+                    </div>
+                    <div class="doc-stat-item">
+                        <span class="doc-stat-num">JWT</span>
+                        <span class="doc-stat-label">Autenticación</span>
+                    </div>
+                    <div class="doc-stat-item">
+                        <span class="doc-stat-num">2.4</span>
+                        <span class="doc-stat-label">GHz Wi-Fi</span>
+                    </div>
+                </div>
+
+                <!-- ══ MIKROTIK 3D SECTION ══ -->
+                <div class="doc-section doc-mikrotik-section">
+                    <div class="doc-section-header">
+                        <span class="doc-section-icon">📡</span>
+                        <h2 class="doc-section-title">Dispositivo de Red: MikroTik RouterBOARD 951G-2HnD</h2>
+                    </div>
+                    <div class="doc-mikrotik-layout">
+                        <!-- Viewer 3D WebGL Three.js Real 360 (Horizontal + Vertical) -->
+                        <div class="doc-mikrotik-viewer">
+                            <div class="mikrotik-3d-scene" id="mikrotik-3d-scene">
+                                <!-- Canvas WebGL 3D -->
+                                <canvas id="mikrotik-3d-canvas"></canvas>
+
+                                <!-- Overlay informativo superior -->
+                                <div class="mt-3d-overlay-top">
+                                    <span class="mt-3d-badge">🎯 Visor 3D 360° Real (Horizontal + Vertical)</span>
+                                    <button class="mt-3d-icon-btn" id="btn-mt-reset" title="Restablecer a vista isométrica">↺ Vista Inicial</button>
+                                </div>
+
+                                <!-- Indicador de modo / ayuda -->
+                                <div class="mt-3d-hint">
+                                    <span>🖱️ Arrastra en cualquier dirección para rotar en 360° · Rueda para Zoom</span>
+                                </div>
+                            </div>
+
+                            <!-- Botonera de Vistas Predefinidas y Auto-Rotación -->
+                            <div class="mikrotik-3d-controls">
+                                <button class="mikrotik-ctrl-btn" id="btn-mt-auto">🔄 Auto-rotar 360°</button>
+                                <button class="mikrotik-ctrl-btn" id="btn-mt-pause" style="display:none;">⏸ Pausar</button>
+                                <button class="mikrotik-ctrl-btn preset-btn" data-angle="front">Frontal (Puertos)</button>
+                                <button class="mikrotik-ctrl-btn preset-btn" data-angle="top">Superior (Logo)</button>
+                                <button class="mikrotik-ctrl-btn preset-btn" data-angle="back">Trasera (Alimentación)</button>
+                                <button class="mikrotik-ctrl-btn preset-btn" data-angle="bottom">Inferior (MAC / Serie)</button>
+                                <button class="mikrotik-ctrl-btn preset-btn" data-angle="iso">Isométrica 3D</button>
+                            </div>
+
+                            <p class="mikrotik-help-text">
+                                💡 Puedes rotar el MikroTik <strong>hacia arriba, abajo y a los lados</strong> para examinar cada detalle: los 5 puertos Gigabit en el frente, el logo en relieve superior, el conector de alimentación trasero y la etiqueta técnica inferior con la dirección MAC oficial y patas de goma.
+                            </p>
+                        </div>
+
+                        <!-- Specs -->
+                        <div class="doc-mikrotik-specs">
+                            <h3 class="doc-specs-title">Especificaciones Técnicas del Hardware</h3>
+                            <div class="doc-spec-grid">
+                                <div class="doc-spec-row"><span class="doc-spec-key">Modelo</span><span class="doc-spec-val">RouterBOARD 951G-2HnD</span></div>
+                                <div class="doc-spec-row"><span class="doc-spec-key">CPU</span><span class="doc-spec-val">Atheros AR9344 · 600 MHz MIPS</span></div>
+                                <div class="doc-spec-row"><span class="doc-spec-key">Memoria RAM</span><span class="doc-spec-val">128 MB DDR SDRAM</span></div>
+                                <div class="doc-spec-row"><span class="doc-spec-key">Almacenamiento</span><span class="doc-spec-val">128 MB NAND Flash</span></div>
+                                <div class="doc-spec-row"><span class="doc-spec-key">Puertos Ethernet</span><span class="doc-spec-val">5 × Gigabit Ethernet 10/100/1000 Mbps</span></div>
+                                <div class="doc-spec-row"><span class="doc-spec-key">Alimentación PoE</span><span class="doc-spec-val">PoE Pasivo en Puerto ETH1 (8-30V)</span></div>
+                                <div class="doc-spec-row"><span class="doc-spec-key">Conectividad Wi-Fi</span><span class="doc-spec-val">802.11b/g/n · 2.4 GHz · Antena MIMO 2.5 dBi</span></div>
+                                <div class="doc-spec-row"><span class="doc-spec-key">Sistema Operativo</span><span class="doc-spec-val">MikroTik RouterOS (License Level 4)</span></div>
+                                <div class="doc-spec-row"><span class="doc-spec-key">Factor de Forma</span><span class="doc-spec-val">Gabinete plástico Desktop compacto</span></div>
+                                <div class="doc-spec-row"><span class="doc-spec-key">Firewall Avanzado</span><span class="doc-spec-val">Filtrado Layer 7 · NAT · Mangle · Address Lists</span></div>
+                                <div class="doc-spec-row"><span class="doc-spec-key">API de Control</span><span class="doc-spec-val">RouterOS API Socket binario (puerto 8728)</span></div>
+                                <div class="doc-spec-row"><span class="doc-spec-key">Servicios de Red</span><span class="doc-spec-val">Servidor DHCP, DNS Caché, Queues de Tráfico</span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ══ ARQUITECTURA ══ -->
+                <div class="doc-section">
+                    <div class="doc-section-header">
+                        <span class="doc-section-icon">🏗️</span>
+                        <h2 class="doc-section-title">Arquitectura del Sistema</h2>
+                    </div>
+                    <div class="doc-arch-diagram">
+                        <div class="arch-layer arch-layer-client">
+                            <div class="arch-layer-label">Capa de Presentación (Frontend)</div>
+                            <div class="arch-items">
+                                <div class="arch-item">🖥️ Panel Admin<br/><small>index.html + app.js</small></div>
+                                <div class="arch-item">📱 Portal Alumno<br/><small>portal.html + portal.js</small></div>
+                                <div class="arch-item">🔐 Login Seguro<br/><small>login.html + login.js</small></div>
+                                <div class="arch-item">📖 Documentación<br/><small>doc.html</small></div>
+                            </div>
+                        </div>
+                        <div class="arch-arrow">⬇ Peticiones HTTP / REST API (Puerto 8000)</div>
+                        <div class="arch-layer arch-layer-backend">
+                            <div class="arch-layer-label">Capa Backend (FastAPI + Python 3.11)</div>
+                            <div class="arch-items">
+                                <div class="arch-item">🔑 Auth &amp; Tokens JWT</div>
+                                <div class="arch-item">👥 Grupos y Mesas</div>
+                                <div class="arch-item">🛡️ Motor Filtrado Web</div>
+                                <div class="arch-item">📊 Stats &amp; Tráfico</div>
+                                <div class="arch-item">📁 Recursos &amp; Archivos</div>
+                                <div class="arch-item">👤 Gestión de Roles</div>
+                            </div>
+                        </div>
+                        <div class="arch-arrow">⬇ SQLAlchemy ORM &nbsp;|&nbsp; RouterOS API Socket :8728</div>
+                        <div class="arch-layer arch-layer-data">
+                            <div class="arch-layer-label">Capa de Datos y Red Física</div>
+                            <div class="arch-items">
+                                <div class="arch-item">🗄️ Base de Datos SQLite<br/><small>networklab.db</small></div>
+                                <div class="arch-item">📡 MikroTik RB951G-2HnD<br/><small>RouterOS API :8728</small></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ══ MÓDULOS ══ -->
+                <div class="doc-section">
+                    <div class="doc-section-header">
+                        <span class="doc-section-icon">📦</span>
+                        <h2 class="doc-section-title">Módulos del Sistema</h2>
+                    </div>
+                    <div class="doc-modules-grid">
+                        <div class="doc-module-card">
+                            <div class="doc-module-icon">🖥️</div>
+                            <h4>Dispositivos y Sesiones</h4>
+                            <p>Monitor en tiempo real de equipos conectados. Detecta el tipo de dispositivo (PC, laptop, smartphone) por prefijo OUI de MAC y hostname, visualiza IP asignada y permite bloquear o liberar sesiones al instante.</p>
+                            <div class="doc-module-tags"><span>DHCP Leases</span><span>Firewall Filter</span><span>OUI Detection</span></div>
+                        </div>
+                        <div class="doc-module-card">
+                            <div class="doc-module-icon">🛡️</div>
+                            <h4>Filtrado Web Inteligente</h4>
+                            <p>Políticas de contenido granular basadas en RouterOS Layer 7 y Address Lists dinámicas. Permite listas blancas de sitios educativos o listas negras de ocio/redes sociales con efecto inmediato.</p>
+                            <div class="doc-module-tags"><span>L7 Protocol</span><span>Address Lists</span><span>DNS Drops</span></div>
+                        </div>
+                        <div class="doc-module-card">
+                            <div class="doc-module-icon">📊</div>
+                            <h4>Estadísticas y Métricas</h4>
+                            <p>Gráficos interactivos construidos con Chart.js para medir ancho de banda por dispositivo, topología de consumo acumulado y volumen de transferencia en vivo.</p>
+                            <div class="doc-module-tags"><span>Chart.js</span><span>Bandwidth</span><span>Real-time</span></div>
+                        </div>
+                        <div class="doc-module-card">
+                            <div class="doc-module-icon">🎮</div>
+                            <h4>Historial y Detección de Apps</h4>
+                            <p>Registro de conexiones y servicios detectados (YouTube, TikTok, Steam, WhatsApp) mediante inspección de puertos destino y tablas de conntrack del firewall.</p>
+                            <div class="doc-module-tags"><span>Conntrack</span><span>Port Inspection</span><span>App Signatures</span></div>
+                        </div>
+                        <div class="doc-module-card">
+                            <div class="doc-module-icon">👥</div>
+                            <h4>Grupos y Aislamiento de Red</h4>
+                            <p>Configuración de mesas de trabajo virtuales donde los equipos del grupo pueden comunicarse entre sí pero quedan aislados del resto del aula mediante reglas de forwarding.</p>
+                            <div class="doc-module-tags"><span>Network Isolation</span><span>Canvas Map</span><span>Virtual Desks</span></div>
+                        </div>
+                        <div class="doc-module-card">
+                            <div class="doc-module-icon">📁</div>
+                            <h4>Gestión de Recursos y Archivos</h4>
+                            <p>Distribución de material didáctico (guías PDF, archivos ZIP, diagramas) desde el admin hacia alumnos o grupos con verificación de MIME y descarga controlada.</p>
+                            <div class="doc-module-tags"><span>File Upload</span><span>MIME Verification</span><span>FileResponse</span></div>
+                        </div>
+                        <div class="doc-module-card">
+                            <div class="doc-module-icon">💬</div>
+                            <h4>Mensajería y Bandeja de Entrada</h4>
+                            <p>Canal de comunicación directo entre alumnos y el docente/admin con soporte de adjuntos, avisos broadcast y bandeja de mensajes priorizada.</p>
+                            <div class="doc-module-tags"><span>Long Polling</span><span>Direct Chat</span><span>Admin Inbox</span></div>
+                        </div>
+                        <div class="doc-module-card">
+                            <div class="doc-module-icon">👤</div>
+                            <h4>Gestión de Usuarios y Accesos</h4>
+                            <p>Administración completa de cuentas con contraseñas seguras hash bcrypt y autenticación Stateless basada en tokens JSON Web Tokens (JWT).</p>
+                            <div class="doc-module-tags"><span>JWT Auth</span><span>bcrypt</span><span>RBAC</span></div>
+                        </div>
+                        <div class="doc-module-card">
+                            <div class="doc-module-icon">⚙️</div>
+                            <h4>Políticas de Sesión y Roles</h4>
+                            <p>Reglas granulares de tiempo límite de sesión, restricciones por tipo de terminal y niveles de privilegio específicos para Administradores, Líderes y Alumnos.</p>
+                            <div class="doc-module-tags"><span>Role Guards</span><span>Time Limits</span><span>Access Policy</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ══ STACK TECNOLÓGICO ══ -->
+                <div class="doc-section">
+                    <div class="doc-section-header">
+                        <span class="doc-section-icon">⚙️</span>
+                        <h2 class="doc-section-title">Stack Tecnológico</h2>
+                    </div>
+                    <div class="doc-tech-grid">
+                        <div class="doc-tech-item">
+                            <div class="doc-tech-logo">🐍</div>
+                            <div class="doc-tech-name">Python 3.11</div>
+                            <div class="doc-tech-desc">Lenguaje core del backend</div>
+                        </div>
+                        <div class="doc-tech-item">
+                            <div class="doc-tech-logo">⚡</div>
+                            <div class="doc-tech-name">FastAPI</div>
+                            <div class="doc-tech-desc">Framework REST asíncrono de alto rendimiento</div>
+                        </div>
+                        <div class="doc-tech-item">
+                            <div class="doc-tech-logo">🗄️</div>
+                            <div class="doc-tech-name">SQLite + SQLAlchemy</div>
+                            <div class="doc-tech-desc">Persistencia de datos y modelos relacionales</div>
+                        </div>
+                        <div class="doc-tech-item">
+                            <div class="doc-tech-logo">🔑</div>
+                            <div class="doc-tech-name">JWT + bcrypt</div>
+                            <div class="doc-tech-desc">Seguridad criptográfica de sesiones</div>
+                        </div>
+                        <div class="doc-tech-item">
+                            <div class="doc-tech-logo">📡</div>
+                            <div class="doc-tech-name">RouterOS API</div>
+                            <div class="doc-tech-desc">Protocolo binario nativo MikroTik</div>
+                        </div>
+                        <div class="doc-tech-item">
+                            <div class="doc-tech-logo">💻</div>
+                            <div class="doc-tech-name">HTML5 Semántico + CSS3</div>
+                            <div class="doc-tech-desc">Interfaz SPA moderna sin dependencias pesadas</div>
+                        </div>
+                        <div class="doc-tech-item">
+                            <div class="doc-tech-logo">🟨</div>
+                            <div class="doc-tech-name">Vanilla JavaScript</div>
+                            <div class="doc-tech-desc">Lógica reactiva del cliente optimizada</div>
+                        </div>
+                        <div class="doc-tech-item">
+                            <div class="doc-tech-logo">📊</div>
+                            <div class="doc-tech-name">Chart.js</div>
+                            <div class="doc-tech-desc">Renderizado de telemetría y métricas</div>
+                        </div>
+                        <div class="doc-tech-item">
+                            <div class="doc-tech-logo">🌐</div>
+                            <div class="doc-tech-name">Uvicorn ASGI</div>
+                            <div class="doc-tech-desc">Servidor de despliegue concurrente</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ══ FLUJO DE FUNCIONAMIENTO ══ -->
+                <div class="doc-section">
+                    <div class="doc-section-header">
+                        <span class="doc-section-icon">🔄</span>
+                        <h2 class="doc-section-title">¿Cómo Funciona el Sistema Paso a Paso?</h2>
+                    </div>
+                    <div class="doc-flow">
+                        <div class="doc-flow-step">
+                            <div class="doc-flow-num">01</div>
+                            <div class="doc-flow-body">
+                                <h4>Conexión Física y Asignación de IP</h4>
+                                <p>Las computadoras, laptops y smartphones se conectan a los puertos Gigabit o a la red Wi-Fi emitida por el MikroTik 951G-2HnD. El servidor DHCP asigna automáticamente las direcciones IP dentro del rango del laboratorio.</p>
+                            </div>
+                        </div>
+                        <div class="doc-flow-step">
+                            <div class="doc-flow-num">02</div>
+                            <div class="doc-flow-body">
+                                <h4>Descubrimiento Automático por Backend</h4>
+                                <p>FastAPI se comunica con el router mediante el socket RouterOS API (puerto 8728). Lee los leases activos, resuelve el fabricante por la MAC y clasifica los dispositivos visualmente en PC, notebook o celular.</p>
+                            </div>
+                        </div>
+                        <div class="doc-flow-step">
+                            <div class="doc-flow-num">03</div>
+                            <div class="doc-flow-body">
+                                <h4>Control Centralizado desde el Panel Web</h4>
+                                <p>El administrador interactúa con la interfaz gráfica para suspender la navegación de una estación, modificar el perfil de filtrado o agrupar equipos en mesas de trabajo virtuales.</p>
+                            </div>
+                        </div>
+                        <div class="doc-flow-step">
+                            <div class="doc-flow-num">04</div>
+                            <div class="doc-flow-body">
+                                <h4>Aplicación Dinámica de Reglas de Red</h4>
+                                <p>Las órdenes se traducen instantáneamente en comandos de RouterOS: inserción de IPs en Address Lists, marcado de paquetes y reglas en Filter / Mangle para bloquear tráfico no educativo.</p>
+                            </div>
+                        </div>
+                        <div class="doc-flow-step">
+                            <div class="doc-flow-num">05</div>
+                            <div class="doc-flow-body">
+                                <h4>Experiencia Interactiva del Alumno</h4>
+                                <p>Los estudiantes acceden al Portal del Alumno desde sus navegadores, donde consultan su estado de sesión, descargan recursos compartidos y chatean con el docente o su grupo asignado.</p>
+                            </div>
+                        </div>
+                        <div class="doc-flow-step">
+                            <div class="doc-flow-num">06</div>
+                            <div class="doc-flow-body">
+                                <h4>Auditoría y Métricas en Tiempo Real</h4>
+                                <p>Todo el consumo de ancho de banda y eventos del laboratorio se almacenan en SQLite, permitiendo auditorías de uso, detección de abusos y reportes estadísticos claros.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ══ FOOTER ══ -->
+                <div class="doc-footer-credits">
+                    <div class="doc-footer-logo">🛡️</div>
+                    <div class="doc-footer-text">
+                        <strong>NetworkLab</strong> — Sistema de Gestión y Control de Laboratorio de Redes<br/>
+                        <span>Desarrollado para MikroTik RouterBOARD 951G-2HnD · FastAPI · SQLite · Chart.js</span>
+                    </div>
+                    <div class="doc-footer-version">v5.8</div>
+                </div>
+
+            </main>
+        </div>
+    </div>
+
+    <!-- Librerías Three.js y OrbitControls locales -->
+    <script src="js/three.min.js"></script>
+    <script src="js/OrbitControls.js"></script>
+
+    <script>
+    // ── Theme Toggle con sincronización en localStorage ──
+    (function() {
+        const html  = document.documentElement;
+        const btn   = document.getElementById('doc-theme-toggle');
+        const icon  = document.getElementById('doc-theme-icon');
+        const label = document.getElementById('doc-theme-label');
+
+        const savedTheme = localStorage.getItem('lab_theme') || 'dark';
+        html.setAttribute('data-theme', savedTheme);
+        updateBtn(savedTheme);
+
+        btn.addEventListener('click', () => {
+            const current = html.getAttribute('data-theme');
+            const next = current === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', next);
+            localStorage.setItem('lab_theme', next);
+            updateBtn(next);
+            if (window.onThemeChanged3D) {
+                window.onThemeChanged3D(next);
+            }
+        });
+
+        function updateBtn(theme) {
+            if (theme === 'dark') {
+                icon.textContent  = '☀️';
+                label.textContent = 'Modo Claro';
+            } else {
+                icon.textContent  = '🌙';
+                label.textContent = 'Modo Oscuro';
+            }
+        }
+    })();
+
+    // ── Fondo de Nodos y Red Animada en Canvas ──
+    (function() {
+        const canvas = document.getElementById('doc-network-canvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        let W, H, nodes = [], animFrame;
+
+        const COLORS = ['rgba(139,92,246,', 'rgba(236,72,153,', 'rgba(251,146,60,', 'rgba(0,217,255,'];
+        const NODE_COUNT   = 45;
+        const CONNECT_DIST = 140;
+
+        function resize() {
+            W = canvas.width  = window.innerWidth;
+            H = canvas.height = window.innerHeight;
+        }
+
+        function randomNode() {
+            const c = COLORS[Math.floor(Math.random() * COLORS.length)];
+            return {
+                x: Math.random() * W, y: Math.random() * H,
+                vx: (Math.random() - 0.5) * 0.25,
+                vy: (Math.random() - 0.5) * 0.25,
+                r: 1.5 + Math.random() * 2,
+                color: c,
+                pulse: Math.random() * Math.PI * 2,
+                pulseSpeed: 0.02 + Math.random() * 0.02
+            };
+        }
+
+        function init() {
+            resize();
+            nodes = Array.from({ length: NODE_COUNT }, randomNode);
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, W, H);
+
+            for (let i = 0; i < nodes.length; i++) {
+                for (let j = i + 1; j < nodes.length; j++) {
+                    const dx = nodes[i].x - nodes[j].x;
+                    const dy = nodes[i].y - nodes[j].y;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    if (dist < CONNECT_DIST) {
+                        const alpha = (1 - dist / CONNECT_DIST) * 0.28;
+                        ctx.beginPath();
+                        ctx.moveTo(nodes[i].x, nodes[i].y);
+                        ctx.lineTo(nodes[j].x, nodes[j].y);
+                        ctx.strokeStyle = nodes[i].color + alpha + ')';
+                        ctx.lineWidth = 0.7;
+                        ctx.stroke();
+                    }
+                }
+            }
+
+            nodes.forEach(n => {
+                n.pulse += n.pulseSpeed;
+                const alpha = 0.5 + Math.sin(n.pulse) * 0.4;
+                const r = n.r * (1 + Math.sin(n.pulse) * 0.15);
+
+                ctx.beginPath();
+                ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+                ctx.fillStyle = n.color + alpha + ')';
+                ctx.fill();
+
+                n.x += n.vx; n.y += n.vy;
+                if (n.x < -20 || n.x > W + 20) n.vx *= -1;
+                if (n.y < -20 || n.y > H + 20) n.vy *= -1;
+            });
+
+            animFrame = requestAnimationFrame(draw);
+        }
+
+        init();
+        draw();
+        window.addEventListener('resize', resize);
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) cancelAnimationFrame(animFrame);
+            else draw();
+        });
+    })();
+
+    // ── Partículas Flotantes en Hero Banner ──
+    (function() {
+        const bg = document.getElementById('doc-hero-particles');
+        if (!bg) return;
+        const COLORS = [
+            'rgba(139,92,246,VAL)', 'rgba(0,217,255,VAL)',
+            'rgba(236,72,153,VAL)', 'rgba(251,146,60,VAL)'
+        ];
+        for (let i = 0; i < 28; i++) {
+            const el  = document.createElement('div');
+            el.className = 'doc-particle';
+            const size = 3 + Math.random() * 6;
+            const x    = Math.random() * 100;
+            const y    = 20 + Math.random() * 80;
+            const dur  = 4 + Math.random() * 8;
+            const del  = Math.random() * 8;
+            const col  = COLORS[Math.floor(Math.random() * COLORS.length)]
+                           .replace('VAL', (0.4 + Math.random() * 0.5).toFixed(2));
+            el.style.cssText = `width:${size}px;height:${size}px;left:${x}%;bottom:${y}px;background:${col};animation-duration:${dur}s;animation-delay:-${del}s;`;
+            bg.appendChild(el);
+        }
+    })();
+
+    // ════════════════════════════════════════════════════════════════
+    //  VISOR 3D WEBGL REAL (THREE.JS + ORBITCONTROLS)
+    //  MikroTik RouterBOARD 951G-2HnD en 360° Horizontal y Vertical
+    // ════════════════════════════════════════════════════════════════
+    (function initMikrotik3D() {
+        const container = document.getElementById('mikrotik-3d-scene');
+        const canvas    = document.getElementById('mikrotik-3d-canvas');
+        if (!container || !canvas || typeof THREE === 'undefined') {
+            console.warn('Three.js o contenedor 3D no disponible.');
+            return;
+        }
+
+        // ── 1. GENERADOR DE TEXTURAS PROCEDURALES DE ALTA RESOLUCIÓN ──
+        function createFrontTexture() {
+            const c = document.createElement('canvas');
+            c.width = 1024; c.height = 240;
+            const ctx = c.getContext('2d');
+
+            // Fondo plástico blanco mate
+            ctx.fillStyle = '#E8ECEF';
+            ctx.fillRect(0, 0, 1024, 240);
+
+            // Borde biselado superior e inferior
+            ctx.fillStyle = '#D6DBE0';
+            ctx.fillRect(0, 0, 1024, 10);
+            ctx.fillRect(0, 230, 1024, 10);
+
+            // Panel hundido cian/turquesa característico de la serie RB951G
+            const grad = ctx.createLinearGradient(0, 30, 0, 210);
+            grad.addColorStop(0, '#0284C7');
+            grad.addColorStop(0.5, '#0EA5E9');
+            grad.addColorStop(1, '#0369A1');
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.roundRect(14, 28, 520, 184, 8);
+            ctx.fill();
+            ctx.strokeStyle = '#024E75';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            // Jack de alimentación POWER a la izquierda
+            ctx.fillStyle = '#1E293B';
+            ctx.fillRect(28, 48, 46, 144);
+            ctx.beginPath();
+            ctx.arc(51, 110, 18, 0, Math.PI * 2);
+            ctx.fillStyle = '#0F172A';
+            ctx.fill();
+            ctx.strokeStyle = '#64748B';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(51, 110, 6, 0, Math.PI * 2);
+            ctx.fillStyle = '#F59E0B';
+            ctx.fill();
+
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = 'bold 11px Inter, sans-serif';
+            ctx.fillText('POWER', 33, 42);
+            ctx.fillText('RESET', 34, 204);
+
+            // Orificio de reset
+            ctx.beginPath();
+            ctx.arc(51, 185, 4, 0, Math.PI * 2);
+            ctx.fillStyle = '#DC2626';
+            ctx.fill();
+
+            // 5 Puertos Gigabit RJ45
+            const portStartX = 94;
+            const portW = 76;
+            const portH = 144;
+            const portGap = 10;
+
+            for (let i = 0; i < 5; i++) {
+                const px = portStartX + i * (portW + portGap);
+
+                // Marco metálico blindado
+                ctx.fillStyle = '#94A3B8';
+                ctx.fillRect(px, 48, portW, portH);
+                ctx.fillStyle = '#CBD5E1';
+                ctx.fillRect(px + 3, 51, portW - 6, portH - 6);
+
+                // Cavidad interna oscura
+                ctx.fillStyle = '#0F172A';
+                ctx.fillRect(px + 7, 56, portW - 14, portH - 18);
+
+                // Pines dorados en la parte superior del RJ45
+                ctx.strokeStyle = '#F59E0B';
+                ctx.lineWidth = 2;
+                for (let p = 0; p < 8; p++) {
+                    ctx.beginPath();
+                    ctx.moveTo(px + 14 + p * 6, 58);
+                    ctx.lineTo(px + 14 + p * 6, 82);
+                    ctx.stroke();
+                }
+
+                // Número de puerto en la parte superior
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = 'bold 16px Inter, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText((i + 1).toString(), px + portW / 2, 42);
+
+                // LED indicador de enlace verde/ámbar
+                ctx.beginPath();
+                ctx.arc(px + portW / 2, 196, 4.5, 0, Math.PI * 2);
+                ctx.fillStyle = i === 0 ? '#10B981' : (i % 2 === 0 ? '#10B981' : '#F59E0B');
+                ctx.fill();
+
+                // Etiqueta especial PoE en puerto 1
+                if (i === 0) {
+                    ctx.fillStyle = '#EA580C';
+                    ctx.font = 'bold 10px monospace';
+                    ctx.fillText('PoE IN', px + portW / 2, 218);
+                }
+            }
+
+            // Marca y Modelo en tipografía nítida
+            ctx.textAlign = 'left';
+            ctx.fillStyle = '#0F172A';
+            ctx.font = 'italic bold 28px "Arial Black", sans-serif';
+            ctx.fillText('MikroTik', 560, 85);
+
+            ctx.fillStyle = '#1E293B';
+            ctx.font = 'bold 26px Inter, sans-serif';
+            ctx.fillText('RouterBOARD 951G-2HnD', 560, 130);
+
+            ctx.fillStyle = '#475569';
+            ctx.font = '500 15px Inter, sans-serif';
+            ctx.fillText('Gigabit SOHO AP · 5x 10/100/1000 ETH · 2.4 GHz Wi-Fi', 560, 162);
+
+            // Rejillas de ventilación laterales derechas
+            ctx.fillStyle = '#94A3B8';
+            for (let v = 0; v < 14; v++) {
+                ctx.fillRect(940 + (v % 2) * 20, 48 + v * 12, 16, 6);
+            }
+
+            return new THREE.CanvasTexture(c);
+        }
+
+        function createTopTexture() {
+            const c = document.createElement('canvas');
+            c.width = 1024; c.height = 840;
+            const ctx = c.getContext('2d');
+
+            // Plástico blanco matte
+            ctx.fillStyle = '#F1F4F7';
+            ctx.fillRect(0, 0, 1024, 840);
+
+            // Borde perimetral con sombra sutil
+            ctx.strokeStyle = '#D1D5DB';
+            ctx.lineWidth = 6;
+            ctx.strokeRect(10, 10, 1004, 820);
+
+            // Rejillas de ventilación izquierda y derecha
+            ctx.fillStyle = '#B0B8C2';
+            for (let i = 0; i < 22; i++) {
+                const y = 90 + i * 30;
+                // Izquierda
+                ctx.beginPath();
+                ctx.roundRect(40, y, 160, 12, 6);
+                ctx.fill();
+                // Derecha
+                ctx.beginPath();
+                ctx.roundRect(824, y, 160, 12, 6);
+                ctx.fill();
+            }
+
+            // Logo central MikroTik RouterBOARD en relieve
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#A8B2C0';
+            ctx.font = 'bold 44px "Arial Black", sans-serif';
+            ctx.fillText('MikroTik', 512, 380);
+
+            ctx.fillStyle = '#7E8B9B';
+            ctx.font = '900 68px "Arial Black", sans-serif';
+            ctx.letterSpacing = '4px';
+            ctx.fillText('RouterBOARD', 512, 455);
+
+            // Indicadores LED frontales superiores (PWR, ACT, 1..5)
+            const ledStartX = 420;
+            for (let i = 0; i < 5; i++) {
+                const lx = ledStartX + i * 46;
+                ctx.fillStyle = '#CBD5E1';
+                ctx.fillRect(lx - 2, 720, 24, 8);
+                ctx.fillStyle = '#10B981';
+                ctx.beginPath();
+                ctx.arc(lx + 10, 724, 5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#64748B';
+                ctx.font = 'bold 13px monospace';
+                ctx.fillText((i + 1).toString(), lx + 10, 755);
+            }
+
+            // LED PWR y USR a la izquierda
+            ctx.fillStyle = '#10B981';
+            ctx.beginPath(); ctx.arc(310, 724, 6, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#475569';
+            ctx.font = 'bold 12px monospace';
+            ctx.fillText('PWR', 310, 755);
+
+            ctx.fillStyle = '#3B82F6';
+            ctx.beginPath(); ctx.arc(360, 724, 6, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#475569';
+            ctx.fillText('ACT', 360, 755);
+
+            return new THREE.CanvasTexture(c);
+        }
+
+        function createBottomTexture() {
+            const c = document.createElement('canvas');
+            c.width = 1024; c.height = 840;
+            const ctx = c.getContext('2d');
+
+            // Plástico base
+            ctx.fillStyle = '#E2E8F0';
+            ctx.fillRect(0, 0, 1024, 840);
+
+            // 4 Marcas de patas de goma circulares en las esquinas
+            const feet = [[110, 110], [914, 110], [110, 730], [914, 730]];
+            feet.forEach(([fx, fy]) => {
+                ctx.beginPath();
+                ctx.arc(fx, fy, 48, 0, Math.PI * 2);
+                ctx.fillStyle = '#1E293B';
+                ctx.fill();
+                ctx.strokeStyle = '#0F172A';
+                ctx.lineWidth = 4;
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.arc(fx, fy, 32, 0, Math.PI * 2);
+                ctx.strokeStyle = '#334155';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            });
+
+            // 2 Ranuras para montaje en pared (keyholes)
+            const holes = [[320, 420], [704, 420]];
+            holes.forEach(([hx, hy]) => {
+                ctx.fillStyle = '#0F172A';
+                ctx.beginPath();
+                ctx.arc(hx, hy - 14, 18, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillRect(hx - 8, hy - 14, 16, 36);
+                ctx.strokeStyle = '#64748B';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            });
+
+            // ── Etiqueta Técnica Oficial (Plate Sticker plateada) ──
+            const sx = 230, sy = 160, sw = 564, sh = 520;
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(sx, sy, sw, sh);
+            ctx.strokeStyle = '#94A3B8';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(sx, sy, sw, sh);
+
+            // Cabecera etiqueta
+            ctx.fillStyle = '#0F172A';
+            ctx.font = 'italic bold 28px "Arial Black", sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText('MikroTik', sx + 26, sy + 44);
+
+            ctx.fillStyle = '#0284C7';
+            ctx.font = 'bold 20px Inter, sans-serif';
+            ctx.fillText('RouterBOARD 951G-2HnD', sx + 170, sy + 44);
+
+            // Línea divisora
+            ctx.strokeStyle = '#CBD5E1';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(sx + 20, sy + 64);
+            ctx.lineTo(sx + sw - 20, sy + 64);
+            ctx.stroke();
+
+            // Código de barras simulado
+            ctx.fillStyle = '#0F172A';
+            let bx = sx + 34;
+            const barW = [3, 1, 4, 2, 1, 5, 2, 4, 1, 3, 2, 5, 1, 4, 3, 1, 2, 4, 1, 3, 2, 4, 1, 5, 2, 3, 1, 4, 2, 5, 3, 1, 4, 2, 1, 4, 2, 3, 1, 5, 2, 4, 1, 3];
+            for (let b = 0; b < barW.length; b++) {
+                ctx.fillRect(bx, sy + 80, barW[b], 48);
+                bx += barW[b] + 3;
+            }
+
+            // Datos técnicos
+            ctx.fillStyle = '#1E293B';
+            ctx.font = 'bold 15px monospace';
+            ctx.fillText('Model: RB951G-2HnD', sx + 26, sy + 160);
+            ctx.fillText('FCC ID: TV7RB951G-2HND', sx + 26, sy + 190);
+            ctx.fillText('IC: 7442A-951G2HND', sx + 26, sy + 220);
+
+            ctx.fillStyle = '#0369A1';
+            ctx.font = 'bold 17px monospace';
+            ctx.fillText('MAC: D4:CA:6D:88:51:A0', sx + 26, sy + 260);
+            ctx.fillText('S/N: 4E68021980F9 / 314', sx + 26, sy + 295);
+
+            ctx.fillStyle = '#334155';
+            ctx.font = '14px Inter, sans-serif';
+            ctx.fillText('PoE In: 8-30V DC / Jack: 8-30V DC', sx + 26, sy + 335);
+            ctx.fillText('RouterOS Level 4 License (WISP / AP)', sx + 26, sy + 365);
+            ctx.fillText('2.4 GHz 802.11b/g/n 1000mW High Power', sx + 26, sy + 395);
+
+            // Sellos regulatorios y código QR
+            ctx.fillStyle = '#64748B';
+            ctx.font = 'bold 18px sans-serif';
+            ctx.fillText('CE   EAC   RoHS   WEEE', sx + 26, sy + 445);
+            ctx.font = '12px Inter, sans-serif';
+            ctx.fillText('Designed & Made in Latvia (EU)', sx + 26, sy + 480);
+
+            // Cuadrado QR en la esquina derecha de la etiqueta
+            ctx.fillStyle = '#0F172A';
+            ctx.fillRect(sx + sw - 120, sy + 360, 96, 96);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(sx + sw - 110, sy + 370, 76, 76);
+            ctx.fillStyle = '#0F172A';
+            ctx.fillRect(sx + sw - 100, sy + 380, 24, 24);
+            ctx.fillRect(sx + sw - 68, sy + 380, 24, 24);
+            ctx.fillRect(sx + sw - 100, sy + 412, 24, 24);
+            ctx.fillRect(sx + sw - 72, sy + 416, 16, 16);
+
+            return new THREE.CanvasTexture(c);
+        }
+
+        function createBackTexture() {
+            const c = document.createElement('canvas');
+            c.width = 1024; c.height = 240;
+            const ctx = c.getContext('2d');
+
+            ctx.fillStyle = '#E8ECEF';
+            ctx.fillRect(0, 0, 1024, 240);
+
+            // Rejillas de ventilación traseras centrales
+            ctx.fillStyle = '#94A3B8';
+            for (let i = 0; i < 40; i++) {
+                ctx.fillRect(180 + i * 14, 50, 6, 140);
+            }
+
+            // Conector DC Barrel Jack
+            ctx.beginPath();
+            ctx.arc(880, 120, 36, 0, Math.PI * 2);
+            ctx.fillStyle = '#0F172A';
+            ctx.fill();
+            ctx.strokeStyle = '#64748B';
+            ctx.lineWidth = 4;
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(880, 120, 10, 0, Math.PI * 2);
+            ctx.fillStyle = '#F59E0B';
+            ctx.fill();
+
+            ctx.fillStyle = '#0F172A';
+            ctx.font = 'bold 15px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('8-30V DC', 880, 185);
+
+            // Tornillo de conexión a tierra
+            ctx.beginPath();
+            ctx.arc(100, 120, 18, 0, Math.PI * 2);
+            ctx.fillStyle = '#CBD5E1';
+            ctx.fill();
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            ctx.fillStyle = '#334155';
+            ctx.font = 'bold 20px sans-serif';
+            ctx.fillText('⏚', 100, 126);
+
+            return new THREE.CanvasTexture(c);
+        }
+
+        function createSideTexture(isLeft) {
+            const c = document.createElement('canvas');
+            c.width = 840; c.height = 240;
+            const ctx = c.getContext('2d');
+
+            ctx.fillStyle = '#E8ECEF';
+            ctx.fillRect(0, 0, 840, 240);
+
+            // Ranuras de ventilación
+            ctx.fillStyle = '#A0AEC0';
+            for (let i = 0; i < 28; i++) {
+                ctx.fillRect(60 + i * 24, 40, 8, 160);
+            }
+
+            // En el lateral izquierdo, dibujar puerto USB 2.0 hembra
+            if (isLeft) {
+                ctx.fillStyle = '#0F172A';
+                ctx.fillRect(680, 80, 80, 80);
+                ctx.fillStyle = '#E2E8F0';
+                ctx.fillRect(690, 90, 60, 60);
+                ctx.fillStyle = '#0F172A';
+                ctx.fillRect(695, 95, 50, 26);
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(700, 122, 40, 22);
+
+                ctx.fillStyle = '#0F172A';
+                ctx.font = 'bold 14px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText('USB 2.0', 720, 186);
+            }
+
+            return new THREE.CanvasTexture(c);
+        }
+
+        // ── 2. ESCENA, CÁMARA Y RENDERIZADOR WEBGL ──
+        const width  = container.clientWidth;
+        const height = container.clientHeight;
+
+        const scene  = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(38, width / height, 0.1, 100);
+
+        // Posición isométrica hero inicial
+        const DEFAULT_CAM_POS = new THREE.Vector3(5.2, 4.2, 6.4);
+        camera.position.copy(DEFAULT_CAM_POS);
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({
+            canvas: canvas,
+            antialias: true,
+            alpha: true
+        });
+        renderer.setSize(width, height);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+        // ── 3. CONTROLES DE ÓRBITA EN 360° (HORIZONTAL Y VERTICAL LIBRE) ──
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.08;
+        controls.minDistance = 4.2;
+        controls.maxDistance = 14;
+
+        // Permite rotación vertical de 0° (arriba) a 180° (abajo total)
+        controls.minPolarAngle = 0.04;
+        controls.maxPolarAngle = Math.PI - 0.04;
+
+        // Rotación horizontal infinita en 360°
+        controls.minAzimuthAngle = -Infinity;
+        controls.maxAzimuthAngle = Infinity;
+
+        controls.autoRotate = false;
+        controls.autoRotateSpeed = 2.4;
+
+        // ── 4. ILUMINACIÓN ESTUDIO PARA TEXTURAS REALISTAS ──
+        const ambientLight = new THREE.AmbientLight(0xFFFFFF, 0.85);
+        scene.add(ambientLight);
+
+        const mainLight = new THREE.DirectionalLight(0xFFFFFF, 0.95);
+        mainLight.position.set(7, 10, 8);
+        scene.add(mainLight);
+
+        // Luz inferior para iluminar la cara de abajo con la etiqueta/MAC
+        const bottomLight = new THREE.DirectionalLight(0xE2E8F0, 0.65);
+        bottomLight.position.set(-5, -9, -4);
+        scene.add(bottomLight);
+
+        // Luz de contorno cian/violeta tecnológica de fondo
+        const rimLight = new THREE.PointLight(0x00D9FF, 1.2, 20);
+        rimLight.position.set(0, 3, -6);
+        scene.add(rimLight);
+
+        // ── 5. MODELADO 3D DEL ROUTERBOARD 951G-2HnD ──
+        const routerGroup = new THREE.Group();
+
+        // Dimensiones físicas aproximadas (relación 138 x 113 x 29 mm)
+        const CHASSIS_W = 5.4;
+        const CHASSIS_H = 1.25;
+        const CHASSIS_D = 4.3;
+
+        const textures = [
+            createSideTexture(false), // 0: +X Right
+            createSideTexture(true),  // 1: -X Left (con USB)
+            createTopTexture(),       // 2: +Y Top (Logo & Vents)
+            createBottomTexture(),    // 3: -Y Bottom (MAC & Sticker)
+            createFrontTexture(),     // 4: +Z Front (5 Gigabit Ports)
+            createBackTexture()       // 5: -Z Back (Power Jack)
+        ];
+
+        const materials = textures.map(tex => new THREE.MeshStandardMaterial({
+            map: tex,
+            roughness: 0.45,
+            metalness: 0.08
+        }));
+
+        const chassisGeo = new THREE.BoxGeometry(CHASSIS_W, CHASSIS_H, CHASSIS_D);
+        const chassisMesh = new THREE.Mesh(chassisGeo, materials);
+        chassisMesh.castShadow = true;
+        chassisMesh.receiveShadow = true;
+        routerGroup.add(chassisMesh);
+
+        // 4 Patas de goma 3D cilíndricas en la parte inferior
+        const footGeo = new THREE.CylinderGeometry(0.24, 0.24, 0.10, 16);
+        const footMat = new THREE.MeshStandardMaterial({
+            color: 0x1E293B,
+            roughness: 0.9,
+            metalness: 0.05
+        });
+        const footOffsets = [
+            [-2.2, -CHASSIS_H / 2 - 0.05, -1.7],
+            [ 2.2, -CHASSIS_H / 2 - 0.05, -1.7],
+            [-2.2, -CHASSIS_H / 2 - 0.05,  1.7],
+            [ 2.2, -CHASSIS_H / 2 - 0.05,  1.7]
+        ];
+        footOffsets.forEach(pos => {
+            const foot = new THREE.Mesh(footGeo, footMat);
+            foot.position.set(...pos);
+            routerGroup.add(foot);
+        });
+
+        // LEDs emisivos de actividad en el frente (Puertos 1 a 5)
+        const ledGeo = new THREE.BoxGeometry(0.08, 0.08, 0.02);
+        const ledMeshes = [];
+        for (let i = 0; i < 5; i++) {
+            const ledMat = new THREE.MeshBasicMaterial({
+                color: i === 0 ? 0x10B981 : (i % 2 === 0 ? 0x10B981 : 0xF59E0B)
+            });
+            const ledMesh = new THREE.Mesh(ledGeo, ledMat);
+            // Posición coincidente con los puertos del frente
+            ledMesh.position.set(-1.85 + i * 0.48, -0.22, CHASSIS_D / 2 + 0.015);
+            routerGroup.add(ledMesh);
+            ledMeshes.push(ledMesh);
+        }
+
+        // Anillo / pedestal orbital tecnológico en la base
+        const ringGeo = new THREE.RingGeometry(3.6, 3.68, 64);
+        const ringMat = new THREE.MeshBasicMaterial({
+            color: 0x00D9FF,
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.25
+        });
+        const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+        ringMesh.rotation.x = Math.PI / 2;
+        ringMesh.position.y = -1.2;
+        scene.add(ringMesh);
+
+        scene.add(routerGroup);
+
+        // ── 6. ANIMACIÓN DE PARPADEO DE ACTIVIDAD DE RED ──
+        let clock = new THREE.Clock();
+        let targetCamPos = null;
+        let isTransitioning = false;
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const elapsed = clock.getElapsedTime();
+
+            // Parpadeo sutil de tráfico de red en los LEDs frontales
+            ledMeshes.forEach((led, idx) => {
+                const blink = Math.sin(elapsed * (8 + idx * 3)) > 0.1;
+                led.visible = blink;
+            });
+
+            // Rotación sutil del anillo pedestal
+            ringMesh.rotation.z = elapsed * 0.15;
+
+            // Transición suave de cámara a vistas predefinidas
+            if (isTransitioning && targetCamPos) {
+                camera.position.lerp(targetCamPos, 0.08);
+                controls.target.lerp(new THREE.Vector3(0, 0, 0), 0.08);
+                if (camera.position.distanceTo(targetCamPos) < 0.05) {
+                    camera.position.copy(targetCamPos);
+                    isTransitioning = false;
+                    targetCamPos = null;
+                }
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // ── 7. RESPONSIVE RESIZE DEL CANVAS ──
+        function onResize() {
+            const w = container.clientWidth;
+            const h = container.clientHeight;
+            camera.aspect = w / h;
+            camera.updateProjectionMatrix();
+            renderer.setSize(w, h);
+        }
+        window.addEventListener('resize', onResize);
+
+        // ── 8. CONTROLADORES DE ÁNGULOS PREDEFINIDOS Y ROTACIÓN ──
+        const btnAuto  = document.getElementById('btn-mt-auto');
+        const btnPause = document.getElementById('btn-mt-pause');
+        const btnReset = document.getElementById('btn-mt-reset');
+        const presetBtns = document.querySelectorAll('.preset-btn');
+
+        function setCameraAngle(x, y, z) {
+            targetCamPos = new THREE.Vector3(x, y, z);
+            isTransitioning = true;
+        }
+
+        const ANGLES = {
+            front:  [0, 0.2, 7.6],      // Frontal (5 Puertos RJ45)
+            top:    [0, 7.8, 0.05],     // Superior (Logo MikroTik en relieve)
+            back:   [0, 0.2, -7.6],     // Trasera (Conector de alimentación)
+            bottom: [0, -7.8, 0.05],    // Inferior (Etiqueta MAC / Serie / Patas)
+            iso:    [5.2, 4.2, 6.4]     // Isométrica perspectiva hero
+        };
+
+        presetBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                presetBtns.forEach(b => b.classList.remove('active-preset'));
+                btn.classList.add('active-preset');
+
+                // Si estaba rotando automáticamente, pausamos para apreciar la vista seleccionada
+                if (controls.autoRotate) {
+                    stopAutoRotate();
+                }
+
+                const key = btn.dataset.angle;
+                if (ANGLES[key]) {
+                    setCameraAngle(...ANGLES[key]);
+                }
+            });
+        });
+
+        function startAutoRotate() {
+            controls.autoRotate = true;
+            btnAuto.style.display  = 'none';
+            btnPause.style.display = '';
+            presetBtns.forEach(b => b.classList.remove('active-preset'));
+        }
+
+        function stopAutoRotate() {
+            controls.autoRotate = false;
+            btnPause.style.display = 'none';
+            btnAuto.style.display  = '';
+        }
+
+        btnAuto.addEventListener('click', startAutoRotate);
+        btnPause.addEventListener('click', stopAutoRotate);
+
+        btnReset.addEventListener('click', () => {
+            stopAutoRotate();
+            presetBtns.forEach(b => b.classList.remove('active-preset'));
+            setCameraAngle(...ANGLES.iso);
+        });
+
+        // Cuando el usuario arrastra manualmente con el mouse, pausamos el auto-rotate
+        controls.addEventListener('start', () => {
+            if (controls.autoRotate) {
+                stopAutoRotate();
+            }
+        });
+
+        // ── 9. SINCRONIZACIÓN DE MODO CLARO / OSCURO EN THREE.JS ──
+        window.onThemeChanged3D = function(theme) {
+            if (theme === 'light') {
+                ambientLight.intensity = 1.15;
+                mainLight.intensity = 1.05;
+                bottomLight.intensity = 0.85;
+                ringMat.color.setHex(0x4F46E5);
+                ringMat.opacity = 0.35;
+            } else {
+                ambientLight.intensity = 0.85;
+                mainLight.intensity = 0.95;
+                bottomLight.intensity = 0.65;
+                ringMat.color.setHex(0x00D9FF);
+                ringMat.opacity = 0.25;
+            }
+        };
+
+        const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+        window.onThemeChanged3D(currentTheme);
+    })();
+    </script>
+</body>
+</html>

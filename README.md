@@ -1,370 +1,236 @@
-# Laboratorio2-Tacuri
-## Router Mikrotik modelo hEX (RB750Gr3)
-# NetworkLab — Plataforma de administración de red y laboratorios
+# 🛡️ NetworkLab — Plataforma de Administración de Red y Laboratorios
+### Router MikroTik hEX (RB750Gr3) | Prácticas Profesionalizantes — Analista de Sistemas
 
-Panel de administración que permite gestionar la red de un laboratorio,
-aula o pequeña oficina a través de un router **MikroTik hEX (RB750Gr3)**
-(RouterOS API): registro y aprobación de dispositivos, control de ancho
-de banda, sesiones, filtrado de sitios web, mensajería y archivos.
+![NetworkLab Architecture](https://img.shields.io/badge/RouterOS-v7.x%20API-blue?logo=mikrotik)
+![FastAPI](https://img.shields.io/badge/Backend-FastAPI%20%7C%20Python%203.11-009688?logo=fastapi)
+![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL%2016-336791?logo=postgresql)
+![Docker Compose](https://img.shields.io/badge/Deploy-Docker%20Compose-2496ED?logo=docker)
+![Frontend](https://img.shields.io/badge/Frontend-Vanilla%20JS%20%7C%20PWA%20%7C%20Chart.js-yellow)
 
-Este documento es la referencia central del proyecto: por qué existe,
-cómo está organizado en niveles de prioridad, qué hace cada módulo, y
-cómo desplegarlo. Se va actualizando a medida que avanza el desarrollo.
+Panel centralizado de administración de red y gestión pedagógica de estaciones de trabajo para aulas de informática, laboratorios o pequeñas instituciones educativas. La plataforma interactúa en tiempo real con un router **MikroTik hEX (RB750Gr3)** mediante la API binaria de RouterOS, integrando autorización de dispositivos, control de ancho de banda (QoS), portal cautivo, filtrado web por lista blanca, distribución de materiales didácticos, medición de tiempos de conexión y comunicados con acuse de recibo.
 
 ---
 
-## 1. Contexto y objetivo
+## 📑 Tabla de Contenidos
 
-El proyecto nace como trabajo de laboratorio para una materia de practicas profesionalizante para la tecnicatura de analista de sistema, y el proyecto se trata y tiene que ver con redes,
-con estos requisitos obligatorios del profesor:
-
-1. **Despliegue unificado**: todo el proyecto debe levantar con un solo
-   comando, `docker-compose up --build`. No se permite instalar
-   dependencias manualmente en el sistema operativo host.
-2. **Seguridad de credenciales**: ningún token, contraseña o credencial
-   se sube al repositorio. Todo secreto vive en un archivo `.env`
-   basado en un `.env.example` versionado.
-3. **Buenas prácticas de Git**: uso de ramas por funcionalidad
-   (`feature/...`), mensajes de commit descriptivos, y documentación
-   clara del proceso de despliegue (este README).
-
-La idea del software es genérica: el mismo "núcleo" (backend + base de
-datos + integración con MikroTik) sirve tanto para un aula de un
-instituto como para una oficina chica o un centro de capacitación. Lo
-que cambia entre esos escenarios es la infraestructura de red física,
-no el software.
-
-### Escenarios de prueba previstos
-
-1. **Casa** (primeras pruebas): dos notebooks y una PC y cuento con un router de movistar que es el que da internet a la casa,
-   todo conectado directo al MikroTik.
-2. **Aula de computación del instituto** (prueba previa a la
-   exposición): el MikroTik se conecta a un gabinete rack existente en el switch que cuenta este rack ahi es donde se conectan todos los equipos, tambien tienen un router.
-   **Importante**: antes de esta prueba hay que confirmar con quien
-   administra esa red si el MikroTik debe actuar solo como switch/AP
-   (sin repartir DHCP propio) o si va a tener un segmento de red
-   aislado — conectar un segundo servidor DHCP a una red que ya tiene
-   uno puede cortar la conectividad de toda el aula.
-3. **Día de la exposición**: demostración en vivo con las
-   computadoras del aula.
+1. [Contexto y Objetivos del Proyecto](#1-contexto-y-objetivos-del-proyecto)
+2. [Arquitectura del Sistema (Enfoque Híbrido)](#2-arquitectura-del-sistema-enfoque-híbrido)
+3. [Hardware de Red Utilizado](#3-hardware-de-red-utilizado)
+4. [Funcionalidades Principales Implementadas](#4-funcionalidades-principales-implementadas)
+5. [Requisitos Previos y Despliegue Rápido](#5-requisitos-previos-y-despliegue-rápido)
+6. [Configuración Inicial del Router MikroTik](#6-configuración-inicial-del-router-mikrotik)
+7. [Endpoints Clave de la API](#7-endpoints-clave-de-la-api)
+8. [Auditoría del Proyecto: ¿Nos falta algo?](#8-auditoría-del-proyecto-nos-falta-algo)
+9. [Estructura Detallada de Archivos](#9-estructura-detallada-de-archivos)
 
 ---
 
-## 2. Hardware de red
+## 1. Contexto y Objetivos del Proyecto
 
-El laboratorio usa un **MikroTik hEX (RB750Gr3)**: 5 puertos Gigabit
-Ethernet, CPU dual-core 880MHz, 256MB RAM, puerto USB y microSD. A
-diferencia del equipo usado en las primeras pruebas (RB951Ui-2HnD),
-**este modelo no tiene WiFi** — es "wired only". Esto significa que la
-conectividad inalámbrica para celulares depende de un Access Point
-externo o del WiFi ya existente en el lugar donde se despliegue (ver
-sección de escenarios de prueba), pero se puede descartar la conexion con los celulares era adicional.
+El proyecto surge como trabajo integrador para la materia de **Prácticas Profesionalizantes** de la carrera **Tecnicatura Superior en Analista de Sistemas**. 
 
-### Aprovechar RouterOS al máximo (enfoque híbrido)
+El objetivo es resolver una problemática cotidiana en las salas de computación de instituciones educativas: **la falta de control sobre los equipos conectados, la dispersión de los alumnos en sitios no académicos, la saturación del ancho de banda y la dificultad para distribuir guías de trabajo y comunicarse con los estudiantes en tiempo real**.
 
-Por indicación del profesor, el proyecto no reimplementa en el backend
-funciones que RouterOS ya resuelve nativamente. El diseño es híbrido:
+### Requisitos Obligatorios Cumplidos:
+* **Despliegue Unificado con Docker**: El sistema completo se inicia con un único comando (`docker-compose up --build`), sin instalar dependencias manuales en el sistema host.
+* **Seguridad de Credenciales**: Ninguna clave, contraseña o token está hardcodeada. Todo se gestiona mediante `.env` basado en una plantilla versionada `.env.example`.
+* **Persistencia y Fuente de Verdad**: La base de datos PostgreSQL actúa como repositorio central histórico. El router MikroTik no se sobrecarga con almacenamiento, únicamente ejecuta las reglas que el backend le instruye.
 
-- **RouterOS hace lo que sabe hacer nativamente**: Hotspot (login,
-  aprobación de dispositivos, límite de tiempo), Queue Trees/Simple
-  Queues (ancho de banda), VLAN (segmentación de red), DHCP, backups
-  de configuración.
-- **El backend (este repositorio) se enfoca en lo que RouterOS no
-  trae**: dashboard centralizado, estadísticas e historial más ricos,
-  archivos compartidos, mensajería con confirmación, y el bot de
-  alertas — y opcionalmente orquesta al Hotspot vía la API de RouterOS
-  (por ejemplo, leyendo la lista de hosts pendientes y aplicando la
-  aprobación sin tener que entrar a Winbox).
+---
 
-La configuración paso a paso del Hotspot está documentada en
-[`docs/hotspot-setup.md`](docs/hotspot-setup.md).
+## 2. Arquitectura del Sistema (Enfoque Híbrido)
 
-## 3. Arquitectura
+El diseño del proyecto sigue un **enfoque híbrido**: RouterOS se encarga de lo que resuelve nativamente a nivel hardware y kernel (firewall, colas QoS, asignaciones DHCP, DNS), mientras que el backend y frontend proporcionan la inteligencia de negocio, analítica, almacenamiento y experiencia de usuario.
 
 ```
- ADMINISTRADOR
-     │
-     ▼
- NETWORKLAB (backend + panel)
-     │
-     ┌────────────────┼────────────────┐
-     │                │                │
-     ▼                ▼                ▼
- DISPOSITIVOS         RED            USUARIOS
-     │                │                │
- ├─ Autorizar     ├─ DHCP          ├─ Mensajes
- ├─ Bloquear      ├─ Firewall      ├─ Archivos
- ├─ Sesiones      ├─ QoS           └─ Permisos
- ├─ Tiempo        ├─ DNS
- └─ Consumo       └─ VLAN (futuro)
-                      │
-                      ▼
-                  MikroTik
-              ┌───────┼───────┐
-              ▼       ▼       ▼
-             PC      PC   Celular
+       +-------------------------------------------------------------+
+       |               DOCENTE / ADMINISTRADOR DE RED                |
+       +-------------------------------------------------------------+
+                                      │
+                                      ▼
+                        Panel Web (Nginx - Puerto 3000)
+                     [index.html / app.js / Chart.js]
+                                      │
+                                      ▼
+                   Backend REST API (FastAPI - Puerto 8000)
+                     [main.py / routeros_client.py / ORM]
+                                 │         │
+                 ┌───────────────┘         └────────────────┐
+                 ▼                                          ▼
+     Base de Datos PostgreSQL (5432)            Router MikroTik hEX (8728)
+       [Dispositivos, Sesiones,                   [DHCP Leases, Address-Lists,
+     Archivos, Mensajes, Dominios]                 Simple Queues, Static DNS]
+                                                            │
+                                              ┌─────────────┴─────────────┐
+                                              ▼                           ▼
+                                      Estación Alumno (PC)         Celular / Tablet
+                                     [portal.html / PWA]         [Captive Portal / PWA]
 ```
 
-- **Backend (FastAPI, Python)**: expone una API REST, habla con el
-  router por la API nativa de RouterOS (librería `librouteros`), y
-  guarda todo el estado (dispositivos, sesiones, logs) en Postgres.
-- **Base de datos (Postgres)**: única fuente de verdad histórica. El
-  MikroTik **no se usa como almacenamiento** — solo aplica las
-  políticas de red que el backend le indica (bloquear una IP, crear
-  una cola de ancho de banda, etc.).
-- **MikroTik**: hace lo mínimo posible, acorde a su hardware limitado
-  (procesador de 600MHz, 128MB RAM, WiFi solo 2.4GHz): DHCP, reglas de
-  firewall simples (address-lists), colas de ancho de banda, DNS
-  estático para el filtrado de dominios. Nada de procesamiento pesado
-  ahí.
-
-### Nota sobre filtrado de sitios web y HTTPS
-
-Casi todo el tráfico de internet hoy va cifrado (HTTPS). Con HTTPS:
-
-- **Sí se puede saber** a qué *dominio* se conectó un dispositivo
-  (ej. `youtube.com`), vía el nombre que pide por DNS o el campo SNI
-  de la conexión.
-- **No se puede leer** el contenido de las páginas ni las páginas
-  específicas dentro de un dominio — eso requeriría interceptar el
-  tráfico con certificados propios (DPI), algo invasivo y fuera del
-  alcance de este proyecto.
-
-Por eso, el filtrado de dominios se implementa vía **DNS estático** en
-el MikroTik: si un dispositivo pide resolver un dominio bloqueado, el
-router responde con una dirección inválida. Es liviano, no exige nada
-al hardware del router, y es honesto sobre lo que puede y no puede
-controlar.
+* **Backend (FastAPI, Python 3.11)**: API REST asíncrona de alto rendimiento conectada al router vía `librouteros` por el puerto 8728.
+* **Base de Datos (PostgreSQL 16 Alpine)**: Almacena el registro de equipos, sesiones históricas, consumo de tráfico, confirmaciones de lectura y políticas por rol.
+* **Frontend (Nginx Alpine)**: SPA desarrollada en Vanilla JavaScript, CSS modular, Chart.js y PDF.js. No requiere pasos de compilación `npm build`.
+* **Router MikroTik**: Conmutación a velocidad de cable, aislamiento de tráfico no autorizado en la lista de firewall `blocked-devices`, colas simples de ancho de banda y resolución de DNS local.
 
 ---
 
-## 4. Estado actual
+## 3. Hardware de Red Utilizado
 
-- [x] Esqueleto Docker (backend FastAPI + Postgres + Adminer)
-- [x] Registro de dispositivos vía DHCP leases
-- [x] Autorización / bloqueo de dispositivos (address-list de firewall)
-- [x] Sesiones (inicio, fin, duración por dispositivo)
-- [x] Tiempo total conectado por dispositivo
-- [x] Guía de configuración de Hotspot documentada (`docs/hotspot-setup.md`)
-- [ ] Hotspot configurado y probado en el router físico (pendiente de recibir el hEX)
-- [ ] Inactividad (tráfico vs. actividad real, requiere diseño adicional)
-- [ ] Control de ancho de banda (QoS)
-- [ ] Límite temporal de conexión
-- [ ] Filtrado de dominios + alertas
-- [x] Dashboard básico (frontend web: lista de dispositivos, aprobar/rechazar, sesiones activas)
-- [ ] Archivos (subida/descarga)
-- [ ] Mensajería con confirmación de entrega
-- [ ] Portal del usuario
-- [ ] Usuarios y roles (admin / profesor / estudiante)
-- [ ] Estadísticas
-- [ ] Bot de Telegram (alertas externas)
+El proyecto utiliza un **MikroTik hEX (RB750Gr3)**:
+* **Procesador**: MediaTek MT7621A dual-core a 880 MHz (4 hilos de ejecución).
+* **Memoria RAM**: 256 MB.
+* **Puertos**: 5 interfaces Gigabit Ethernet (10/100/1000 Mbps).
+* **Almacenamiento Adicional**: Puerto USB y ranura microSD.
+* **Alimentación**: Fuente de 24V.
+* **Conectividad Inalámbrica**: Este modelo es *wired-only* (sin radio WiFi integrada). En caso de conectar teléfonos celulares o tablets, se conecta un Access Point externo o el switch del aula a una de las bocas LAN del router.
 
 ---
 
-## 5. Niveles de prioridad
+## 4. Funcionalidades Principales Implementadas
 
-El proyecto tiene muchas funcionalidades posibles. Para que sea
-manejable en el tiempo disponible, se dividió en niveles: no se pasa
-al siguiente nivel hasta que el anterior esté sólido.
+### 1. Detección y Reserva de IP Estática Única
+* Cuando un equipo se conecta a la red, el servidor DHCP de MikroTik le asigna una IP dinámica.
+* El backend detecta la concesión y la convierte automáticamente en una **reserva estática vinculada a la dirección MAC del equipo**. Esto garantiza que cada dispositivo conserve siempre la misma dirección IP exclusiva como su identificador de red, evitando colisiones o reasignaciones a otros equipos.
 
-### 🔴 Nivel 1 — Obligatorio (base del sistema)
+### 2. Sala de Espera y Portal Cautivo para Alumnos (`portal.html`)
+* Los equipos no aprobados quedan aislados automáticamente de internet en la lista `blocked-devices`.
+* Al abrir el navegador, el estudiante accede a una **Sala de Espera** con animación de radar de sincronización y detección automática de su equipo e IP.
+* En cuanto el docente autoriza al alumno desde el panel, el portal pasa en tiempo real (sin refrescar la página) a la **Vista Autorizada**, iniciando el temporizador de sesión.
 
-Sin esto, no hay proyecto.
+### 3. Control de Tiempo de Conexión y Detección de Inactividad
+* Cada rol tiene asignado un límite de tiempo de conexión (ej. 120 minutos).
+* El portal del alumno descuenta el tiempo en pantalla con un reloj de alta visibilidad y dispara alertas visuales y sonoras cuando restan menos de 3 minutos.
+* Al expirar el tiempo, el router corta el acceso y la interfaz le ofrece al alumno un botón para solicitar una nueva sesión.
+* El sistema audita el tráfico transmitido para diferenciar el **tiempo activo** del **tiempo muerto / inactividad** del equipo.
 
-- Docker, backend, base de datos, integración básica con MikroTik.
-- **Registro de dispositivos**: IP, MAC, nombre de host (si está
-  disponible), primera detección, última detección, estado.
-- **Autorización y bloqueo**: el administrador decide si un
-  dispositivo puede usar la red; el backend aplica la política en el
-  MikroTik (address-list + regla de firewall) y registra la acción.
-- **Sesiones**: registrar inicio, fin y duración de cada conexión.
-  Permitir consultar historial por dispositivo y por período.
-- **Tiempo conectado**: separar tiempo total conectado de períodos
-  sin tráfico significativo. *Aclaración importante*: esto mide
-  tráfico de red, no equivale a saber si una persona dejó de tocar el
-  teclado o el mouse — son conceptos distintos y no se debe prometer
-  lo segundo.
+### 4. Control de Ancho de Banda (QoS)
+* Al aprobar a un estudiante, el backend crea dinámicamente una cola simple (`/queue/simple`) en RouterOS asociada a su IP.
+* Aplica límites simétricos o asimétricos (ej. 10 Mbps para Nivel 1, 15 Mbps para Nivel 2), impidiendo que descargas masivas o videos saturen la red del laboratorio.
 
-### 🟠 Nivel 2 — Funcionalidades de red
+### 5. Filtrado Web por Lista Blanca
+* Enfoque educativo: en lugar de bloquear sitios uno por uno, la red funciona en modo **Lista Blanca**; los alumnos únicamente pueden navegar en las plataformas educativas y académicas expresamente autorizadas por el docente (Wikipedia, GitHub, Classroom, etc.).
+* El router aplica esta política mediante registros en `/ip/dns/static`.
 
-- **Ancho de banda (QoS)**: límites de velocidad por dispositivo o por
-  grupo, vía simple queues de RouterOS. Velocidad en Mbps, volumen
-  transferido en MB/GB.
-- **Límite temporal**: hora de inicio, duración y finalización de una
-  sesión permitida; aviso antes de que termine; política de
-  restricción automática al finalizar.
-- **Dominios restringidos**: listas de dominios permitidos/bloqueados
-  vía DNS estático (ver nota de HTTPS arriba); registro de intentos
-  identificables.
-- **Alertas**: nuevo dispositivo pidiendo conexión, bloqueos, intentos
-  de acceso a dominios no permitidos, fin de tiempo de conexión,
-  problemas de comunicación con el MikroTik.
+### 6. Distribución de Archivos y Visor Embebido (PDF.js)
+* El docente puede subir guías de trabajos prácticos, códigos fuente, apuntes o ejercicios en formatos PDF, imágenes, texto, Python o archivos comprimidos.
+* Los alumnos pueden previsualizar los archivos PDF directamente en un modal embebido gracias a **PDF.js**, sin necesidad de contar con lectores externos o conexión a internet exterior.
 
-### 🟢 Nivel 3 — Plataforma
+### 7. Comunicados en Red, Confirmación de Lectura ($x/y$) y Notificaciones Push
+* El docente puede emitir comunicados con prioridad *Informativa*, *Aviso* o *Urgente*.
+* El portal del alumno reproduce sonidos de campana sintetizados (Web Audio API) y activa la vibración en celulares.
+* **Notificaciones en Segundo Plano**: Mediante un **Service Worker** (`sw.js`), las notificaciones llegan a la barra de estado de Android y al centro de notificaciones de la PC aunque la pestaña esté minimizada o el teléfono bloqueado.
+* **Botón `✓ Marcar como leído`**: Guarda el acuse de recibo de forma persistente en `localStorage` y en la base de datos para que el anuncio no vuelva a aparecer al recargar.
+* En el panel del docente se visualiza el contador en tiempo real:
+  $$\text{👁️ } \text{confirmaron lectura} \text{ / } \text{total conectados} \quad (\%)$$
 
-- **Archivos**: el admin/profesor sube PDF, ZIP u otros materiales al
-  servidor; los usuarios autorizados los descargan desde el portal. El
-  MikroTik no se usa como almacenamiento.
-- **Mensajería**: enviar mensajes a todos, a un grupo, o a un
-  dispositivo/usuario específico; registrar enviado, entregado y
-  confirmado.
-- **Portal del usuario**: página simple donde cada usuario ve sus
-  mensajes, confirma recepción, descarga archivos y ve su tiempo
-  restante de conexión.
-- **Usuarios y roles**: administrador, profesor/operador y
-  usuario/estudiante, con permisos diferenciados. Las contraseñas se
-  guardan siempre con hash, nunca en texto plano.
-
-### 🔵 Nivel 4 — Extra (si alcanza el tiempo)
-
-- **Bot de Telegram**: alertas externas al administrador (nuevo
-  dispositivo, bloqueo, intento no permitido, fin de tiempo). Se
-  implementa recién después de tener sólidos los niveles anteriores.
-- **Estadísticas avanzadas**: tiempo de uso, conexiones, tráfico
-  histórico, eventos bloqueados, gráficos.
-- **Ideas que requieren diseño adicional, para más adelante**: VLAN e
-  inter-VLAN routing (separar redes de alumnos y profesores a nivel
-  de red), estadísticas de tráfico detalladas, detección más fina de
-  inactividad.
+### 8. Doble Modo Visual: Modo Oscuro & Modo Claro
+* **Modo Oscuro**: Estética moderna con fondos oscuros, efectos de cristal (*glassmorphism*) y acentos cian/violeta.
+* **Modo Claro (Alta Legibilidad)**: Diseñado con altos estándares de contraste visual (fondos blancos nítidos, texto oscuro `#0F172A`, botones y tablas 100% legibles bajo luz solar directa o proyectores de clase).
 
 ---
 
-## 6. Glosario rápido de redes
+## 5. Requisitos Previos y Despliegue Rápido
 
-Para quien no viene del mundo de redes:
+### Requisitos:
+* **Docker** y **Docker Compose** instalados en el equipo servidor.
+* Router MikroTik encendido y conectado por red al servidor.
 
-- **DHCP**: servicio que asigna automáticamente una IP a cada
-  dispositivo que se conecta.
-- **QoS (Quality of Service)**: reglas para priorizar o limitar
-  tráfico — permite decir "este dispositivo no puede pasar de 5 Mbps".
-- **VLAN**: forma de dividir una red física en redes "virtuales"
-  separadas (por ejemplo, que los celulares de alumnos no vean
-  directamente la PC del profesor, aunque compartan el mismo switch).
-- **DNS**: servicio que traduce nombres (`ejemplo.com`) a direcciones
-  IP. Es la base del filtrado de dominios de este proyecto.
-- **Address-list / firewall rule**: en RouterOS, una lista de
-  direcciones IP a la que se le puede aplicar una acción (por ejemplo,
-  bloquear todo el tráfico de las IPs de esa lista).
-- **Hotspot**: función nativa de MikroTik que muestra una página de
-  login antes de dar acceso a internet — candidata a usar como base
-  del portal del usuario (Nivel 3) en vez de construir el login desde
-  cero.
+### Pasos de Despliegue:
 
----
+1. **Clonar el repositorio**:
+   ```bash
+   git clone https://github.com/tu-usuario/Laboratorio2-Tacuri.git
+   cd Laboratorio2-Tacuri
+   ```
 
-## 7. Requisitos previos
-
-- Docker y Docker Compose instalados.
-- Un router MikroTik con la API de RouterOS habilitada (ver sección 8).
-- **No se necesita instalar Python, Postgres, ni ninguna dependencia en
-  el sistema host.** Todo corre dentro de los contenedores.
-
-## 8. Cómo levantar el proyecto
-
-1. Copiar el archivo de ejemplo de variables de entorno:
-
+2. **Crear el archivo de configuración `.env`**:
    ```bash
    cp .env.example .env
    ```
+   *(Ajustar si es necesario la IP del MikroTik y las contraseñas).*
 
-2. Completar `.env` con los datos reales del router y las credenciales
-   que quieras usar (nunca subir este archivo al repositorio, ya está
-   en `.gitignore`).
-
-3. Levantar todo con un solo comando:
-
+3. **Iniciar los servicios**:
    ```bash
-   docker-compose up --build
+   docker-compose up --build -d
    ```
 
-4. Servicios disponibles:
-   - **Panel de administración (frontend)**: http://localhost:3000
-   - Backend (FastAPI): http://localhost:8000
-   - Documentación interactiva de la API: http://localhost:8000/docs
-   - Adminer (ver la base de datos): http://localhost:8080
-     (sistema: PostgreSQL, servidor: `db`, usuario/clave/base: los del
-     `.env`)
+4. **Accesos del Sistema**:
+   * **Panel del Docente / Administrador**: `http://localhost:3000`
+   * **Portal Cautivo del Alumno**: `http://localhost:3000/portal.html`
+   * **Documentación Interactiva Swagger (API)**: `http://localhost:8000/docs`
+   * **Base de Datos PostgreSQL**: `localhost:5432`
 
-## 9. Preparar el router (una sola vez, manual)
+---
 
-1. En Winbox: `IP → Services` y confirmar que el servicio `api` está
-   habilitado (puerto 8728).
-2. En `System → Users`, crear un usuario dedicado (por ejemplo
-   `api-lab`) con permisos suficientes para leer DHCP y editar
-   firewall.
-3. Crear la address-list de bloqueo y la regla de firewall que la usa
-   (el backend no la crea automáticamente, se hace una sola vez):
+## 6. Configuración Inicial del Router MikroTik
 
-   En `IP → Firewall → Filter Rules`, agregar una regla:
-   - Chain: `forward`
-   - Src. Address List: `blocked-devices`
-   - Action: `drop`
+Para que el backend pueda comunicarse con el router, se deben realizar estos tres pasos sencillos por única vez mediante Winbox:
 
-   Con esto, cualquier dispositivo que el panel marque como
-   "pendiente" o "rechazado" queda sin salida a internet hasta que el
-   admin lo apruebe.
+1. **Habilitar el servicio API**:
+   * En `IP → Services`, habilitar el servicio `api` (puerto `8728`).
+2. **Crear el usuario API**:
+   * En `System → Users`, crear el usuario `api-lab` con grupo `write` o `full` y la contraseña definida en el archivo `.env`.
+3. **Crear la regla de Firewall para aislamiento**:
+   * En `IP → Firewall → Filter Rules`, agregar una regla:
+     * **Chain**: `forward`
+     * **Src. Address List**: `blocked-devices`
+     * **Action**: `drop`
+     * *Comentario*: `Drop blocked and unapproved devices`
 
-### ⚠️ Nota sobre la alimentación del equipo
+---
 
-El router usado en este proyecto (RB951Ui-2HnD) requiere una fuente de
-**24V**. Alimentarlo con una fuente de voltaje distinto (por ejemplo,
-una fuente genérica de 12V pensada para cámaras/audio) puede causar
-reinicios intermitentes bajo carga, o directamente dañar el equipo.
-Verificar siempre la etiqueta de la fuente antes de conectar.
+## 7. Endpoints Clave de la API
 
-## 10. Uso básico de la API (mientras no hay frontend)
+| Método | Endpoint | Descripción |
+| :--- | :--- | :--- |
+| `POST` | `/auth/token` | Inicio de sesión administrativo y entrega de JWT. |
+| `POST` | `/devices/sync` | Sincroniza leases DHCP y detecta nuevos equipos. |
+| `POST` | `/devices/{id}/approve` | Autoriza al equipo, aplica cola QoS y reserva IP fija. |
+| `POST` | `/devices/{id}/reject` | Bloquea la salida a internet de la estación. |
+| `GET` | `/sessions/active` | Consulta las sesiones de trabajo en curso. |
+| `GET` | `/stats/dashboard` | Retorna KPIs, consumo promedio y uptime del router. |
+| `GET` | `/web-filter/` | Lista las reglas activas de filtrado web. |
+| `POST` | `/files/upload` | Subida de guías y archivos para los alumnos. |
+| `GET` | `/files/{id}/view` | Streaming para visor PDF integrado. |
+| `POST` | `/messages/` | Emisión de comunicados y alertas en la red. |
+| `GET` | `/messages/` | Listado de comunicados con contador de confirmación $x/y$. |
+| `POST` | `/messages/{id}/read` | Registra que el alumno marcó el comunicado como leído. |
+| `GET` | `/portal/status` | Telemetría para el portal cautivo del estudiante. |
 
-- `POST /devices/sync` → lee los leases DHCP del router y registra
-  como "pending" los dispositivos nuevos (y los bloquea
-  automáticamente).
-- `GET /devices/` → lista todos los dispositivos registrados.
-- `GET /devices/?status=pending` → solo los pendientes de aprobación.
-- `POST /devices/{id}/approve` → aprueba y desbloquea el dispositivo.
-- `POST /devices/{id}/reject` → rechaza y lo mantiene/pasa a
-  bloqueado.
-- `POST /sessions/sync` → abre sesiones nuevas para dispositivos
-  aprobados que aparecen en los leases DHCP, y cierra las sesiones de
-  los que dejaron de aparecer por más de 5 minutos.
-- `GET /sessions/` → historial completo de sesiones (opcionalmente
-  `?device_id=` para filtrar por dispositivo).
-- `GET /sessions/active` → dispositivos conectados en este momento.
-- `GET /sessions/device/{id}/total-time` → tiempo total conectado de
-  un dispositivo, sumando todas sus sesiones.
+---
 
-> **Nota**: en esta etapa, `POST /devices/sync` y `POST /sessions/sync`
-> se llaman manualmente (por ejemplo, desde `/docs`). Más adelante se
-> puede automatizar con una tarea periódica (cada 1-2 minutos) para
-> que el registro sea continuo sin intervención manual.
+## 8. Auditoría del Proyecto: ¿Nos falta algo?
 
-## 11. Flujo de trabajo con Git
+A continuación se presenta un balance técnico honesto sobre el estado del proyecto frente a los requerimientos de la cátedra:
 
-- La rama `main` siempre debe quedar en un estado que levante con
-  `docker-compose up --build` sin errores.
-- Cada funcionalidad nueva se desarrolla en su propia rama, con el
-  patrón:
+### ✅ Aspectos Completados al 100%:
+* Despliegue con Docker Compose en 1 comando (BD, API, Nginx).
+* Vinculación en tiempo real con RouterOS mediante API nativa.
+* Asignación de IP estática única para prevenir colisiones en el DHCP.
+* Aprobación / rechazo de estaciones con reglas de firewall automáticas.
+* Control de ancho de banda QoS adaptativo por rol.
+* Control temporal de sesiones con detección de inactividad por bytes de red.
+* Filtrado web por lista blanca y sincronización con el DNS del router.
+* Sala de espera y portal cautivo para estudiantes.
+* Distribución y visor embebido de archivos PDF sin internet.
+* Comunicados con Service Worker, notificaciones push nativas y acuse de recibo $x/y$.
+* Doble interfaz visual (Modo Oscuro / Modo Claro de alto contraste).
 
-  ```
-  feature/<nombre-corto>
-  ```
+### 🔍 Mejoras y Extensiones Opcionales (Futuras Fases):
+1. **Worker Autónomo en Segundo Plano (Background Cron)**:
+   * *Estado actual*: La sincronización de leases y sesiones se dispara periódicamente cuando el panel administrativo o el portal del alumno están abiertos en el navegador.
+   * *Mejora futura*: Añadir una tarea en segundo plano con `APScheduler` o `Celery` dentro del contenedor del backend para que audite las sesiones cada 60 segundos incluso si ningún usuario tiene la página web abierta.
+2. **Exportación de Reportes a PDF / Excel**:
+   * *Estado actual*: Las estadísticas e historial se visualizan interactivamente en pantalla mediante Chart.js y tablas.
+   * *Mejora futura*: Incorporar un botón "Exportar Asistencia y Uso" que descargue una planilla `.xlsx` o un informe imprimible con las horas trabajadas por cada alumno.
+3. **Notificaciones Externas por Bot de Telegram**:
+   * *Estado actual*: Las alertas funcionan dentro de la red local (web y notificaciones de sistema operativo).
+   * *Mejora futura*: Enviar un mensaje de Telegram al celular del docente cuando un alumno no autorizado intente conectarse fuera del horario de clase.
 
-  Ejemplos: `feature/sessions`, `feature/qos-bandwidth`,
-  `feature/web-filtering`, `feature/telegram-bot`.
+---
 
-- Los mensajes de commit deben ser descriptivos, en modo imperativo:
+## 9. Estructura Detallada de Archivos
 
-  ```
-  git commit -m "Agregar registro de sesiones por dispositivo"
-  ```
+Para conocer el detalle exhaustivo de cada archivo del proyecto, sus métodos internos, modelos de base de datos y la justificación técnica de cada librería utilizada, consulta el documento técnico complementario:
 
-- Antes de mergear a `main`, actualizar la sección "Estado actual" de
-  este README marcando el módulo como completado.
-
-## 12. Seguridad de credenciales
-
-- Ningún token, contraseña o credencial va en el código ni se sube al
-  repositorio.
-- Todo secreto vive en `.env` (ignorado por git) y se referencia desde
-  el código vía variables de entorno (ver `app/config.py`).
-- `.env.example` documenta qué variables existen, sin valores reales.
-- Las contraseñas de usuarios del sistema (cuando se implemente el
-  módulo de roles) se guardan siempre con hash, nunca en texto plano.
+👉 **[ESTRUCTURA_Y_ARCHIVOS.md](ESTRUCTURA_Y_ARCHIVOS.md)**

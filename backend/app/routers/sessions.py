@@ -5,13 +5,14 @@ from sqlalchemy.orm import Session as DBSession
 
 from app.database import get_db
 from app.models import Dispositivo, EstadoDispositivo, Sesion
+from app.config import settings
+from app.routers.devices import check_ip_ping
 from app import routeros_client
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
-# Si un dispositivo aprobado deja de verse en los leases DHCP por más
-# de este tiempo, se considera que se desconectó y se cierra la sesión.
-SESSION_TIMEOUT_MINUTES = 5
+# Tiempo máximo sin presencia física antes de cerrar automáticamente la sesión (en segundos)
+DISCONNECT_TIMEOUT_SECONDS = 45
 
 
 @router.post("/sync")
@@ -20,21 +21,23 @@ def sync_sessions(db: DBSession = Depends(get_db)):
     Recorre los leases DHCP actuales y:
     - Si un dispositivo APROBADO está presente y no tiene sesión
       abierta, abre una sesión nueva.
-    - Si ya tiene sesión abierta, actualiza 'ultimo_pulso'.
+    - Si ya tiene sesión abierta y está físicamente activo, actualiza 'ultimo_pulso'.
     - Verifica si alguna sesión superó su 'limite_tiempo_minutos'; si expiró,
       corta el acceso en MikroTik y cierra la sesión.
-    - Cierra las sesiones abiertas de dispositivos que no aparecieron
-      en los leases por más de SESSION_TIMEOUT_MINUTES.
+    - Cierra de inmediato las sesiones abiertas de dispositivos que se desconectaron de la red física.
     """
     leases = routeros_client.get_dhcp_leases()
     active_macs = routeros_client.get_hotspot_active_macs()
-    macs_presentes = active_macs if active_macs else {lease["mac_address"].strip().upper() for lease in leases if lease["mac_address"]}
+    real_network_macs = routeros_client.get_mikrotik_active_network_macs()
+    # Solo dispositivos con tráfico real en bridge o asociación Wi-Fi (NO incluir leases estáticos/inactivos)
+    macs_presentes = set(active_macs).union(real_network_macs)
+    admin_macs = settings.admin_mac_list
 
     abiertas = 0
     cerradas = 0
     ahora = datetime.now()
 
-    # Refrescar pulso de dispositivos presentes que tienen sesión abierta
+    # Refrescar pulso solo si el dispositivo está REALMENTE activo y respondiendo
     for lease in leases:
         mac = (lease.get("mac_address") or "").strip().upper()
         if not mac:
@@ -44,19 +47,25 @@ def sync_sessions(db: DBSession = Depends(get_db)):
         if not device:
             continue
 
+        es_admin = mac in admin_macs or device.rol == "admin"
+        esta_activo_real = es_admin or (mac in macs_presentes) or check_ip_ping(lease.get("ip_address"))
+
         sesion_abierta = (
             db.query(Sesion)
             .filter(Sesion.dispositivo_id == device.id, Sesion.fin.is_(None))
             .first()
         )
 
-        if sesion_abierta and (mac in macs_presentes):
+        if sesion_abierta and esta_activo_real:
+            ultimo = sesion_abierta.ultimo_pulso or sesion_abierta.inicio
+            delta = (ahora - ultimo).total_seconds()
+            if 0 < delta <= 90:
+                sesion_abierta.tiempo_activo_segundos = (getattr(sesion_abierta, "tiempo_activo_segundos", 0) or 0) + int(delta)
             sesion_abierta.ultimo_pulso = ahora
             sesion_abierta.direccion_ip = lease["ip_address"]
 
     # Evaluar sesiones abiertas para cierre por inactividad o expiración de tiempo
     sesiones_abiertas = db.query(Sesion).filter(Sesion.fin.is_(None)).all()
-    limite_inactividad = ahora - timedelta(minutes=SESSION_TIMEOUT_MINUTES)
 
     for sesion in sesiones_abiertas:
         device = db.query(Dispositivo).filter(Dispositivo.id == sesion.dispositivo_id).first()
@@ -64,7 +73,8 @@ def sync_sessions(db: DBSession = Depends(get_db)):
             continue
 
         mac_norm = (device.direccion_mac or "").strip().upper()
-        sigue_presente = mac_norm in macs_presentes
+        es_admin = mac_norm in admin_macs or device.rol == "admin"
+        sigue_presente = es_admin or (mac_norm in macs_presentes) or check_ip_ping(device.direccion_ip or sesion.direccion_ip)
 
         # 1. Chequear si expiró el tiempo límite asignado
         if sesion.limite_tiempo_minutos is not None and sesion.limite_tiempo_minutos > 0:
@@ -75,23 +85,37 @@ def sync_sessions(db: DBSession = Depends(get_db)):
                 sesion.esta_expirada = True
                 device.estado = EstadoDispositivo.pendiente
                 if device.direccion_mac:
-                    routeros_client.revoke_hotspot_device(device.direccion_mac)
+                    try:
+                        routeros_client.revoke_hotspot_device(device.direccion_mac)
+                    except Exception:
+                        pass
                 if device.direccion_ip:
-                    routeros_client.remove_bandwidth_limit(device.direccion_ip)
-                    routeros_client.unblock_device(device.direccion_ip)
+                    try:
+                        routeros_client.remove_bandwidth_limit(device.direccion_ip)
+                        routeros_client.unblock_device(device.direccion_ip)
+                    except Exception:
+                        pass
                 cerradas += 1
                 continue
 
         # 2. Chequear si se desconectó de la red física
-        if not sigue_presente and sesion.ultimo_pulso < limite_inactividad:
-            sesion.fin = sesion.ultimo_pulso or ahora
-            sesion.esta_expirada = True
-            device.estado = EstadoDispositivo.pendiente
-            if device.direccion_mac:
-                routeros_client.revoke_hotspot_device(device.direccion_mac)
-            if device.direccion_ip:
-                routeros_client.remove_bandwidth_limit(device.direccion_ip)
-            cerradas += 1
+        if not sigue_presente:
+            ultimo = sesion.ultimo_pulso or sesion.inicio
+            if (ahora - ultimo).total_seconds() >= DISCONNECT_TIMEOUT_SECONDS:
+                sesion.fin = sesion.ultimo_pulso or ahora
+                sesion.esta_expirada = True
+                device.estado = EstadoDispositivo.pendiente
+                if device.direccion_mac:
+                    try:
+                        routeros_client.revoke_hotspot_device(device.direccion_mac)
+                    except Exception:
+                        pass
+                if device.direccion_ip:
+                    try:
+                        routeros_client.remove_bandwidth_limit(device.direccion_ip)
+                    except Exception:
+                        pass
+                cerradas += 1
 
     db.commit()
 

@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Usuario, Dispositivo, Sesion, DominioBloqueado, EstadoDispositivo
 from app.auth import requiere_usuario
+from app import routeros_client
 
 router = APIRouter(prefix="/portal", tags=["portal_alumno"])
 
@@ -28,11 +29,12 @@ def _obtener_info_filtrado(db: Session):
 def obtener_estado_conexion(
     request: Request,
     ip: str | None = None,
+    mac: str | None = None,
     db: Session = Depends(get_db),
 ):
     """
     Endpoint público del Portal Cautivo:
-    Detecta automáticamente la IP de la computadora del alumno y devuelve su estado actual:
+    Detecta automáticamente la IP y MAC de la estación o celular del alumno y devuelve su estado actual:
     - 'pendiente': Esperando aprobación del profesor.
     - 'aprobado': Acceso activo con Timer regresivo, límite QoS y filtros web.
     - 'rechazado' o 'expirado': Conexión finalizada o restringida.
@@ -46,14 +48,46 @@ def obtener_estado_conexion(
         else:
             client_ip = request.client.host if request.client else "127.0.0.1"
 
-    # 2. Buscar el dispositivo en la base de datos por su IP
-    device = db.query(Dispositivo).filter(Dispositivo.direccion_ip == client_ip).first()
+    # 2. Buscar el dispositivo por MAC si se especificó, o por IP
+    device = None
+    if mac and mac.strip():
+        mac_clean = mac.strip().upper()
+        device = db.query(Dispositivo).filter(Dispositivo.direccion_mac == mac_clean).first()
 
-    # Si es localhost (pruebas locales), tomar el último dispositivo registrado o el primero aprobado
-    if not device and client_ip in ("127.0.0.1", "localhost", "::1"):
-        device = db.query(Dispositivo).order_by(Dispositivo.ultima_actividad.desc()).first()
+    if not device and client_ip and client_ip not in ("192.168.88.1", "127.0.0.1", "localhost", "::1"):
+        device = db.query(Dispositivo).filter(Dispositivo.direccion_ip == client_ip).first()
 
-    categorias_bloqueadas, lista_dominios = _obtener_info_filtrado(db)
+    # Si no está en BD pero la IP pertenece a la red de clientes MikroTik (192.168.88.x),
+    # intentar resolver su MAC desde DHCP leases de MikroTik para enlazar de inmediato su identidad real
+    if not device and client_ip and client_ip.startswith("192.168.88.") and client_ip not in ("192.168.88.1", "192.168.88.252"):
+        try:
+            leases = routeros_client.get_dhcp_leases()
+            for l in leases:
+                if l.get("ip_address") == client_ip:
+                    m = (l.get("mac_address") or "").strip().upper()
+                    if m:
+                        device = db.query(Dispositivo).filter(Dispositivo.direccion_mac == m).first()
+                        if device:
+                            device.direccion_ip = client_ip
+                            db.commit()
+                        else:
+                            nombre_h = l.get("hostname") or f"Estación {client_ip}"
+                            device = Dispositivo(
+                                direccion_mac=m,
+                                direccion_ip=client_ip,
+                                nombre_host=nombre_h,
+                                estado=EstadoDispositivo.pendiente,
+                                rol="nivel_1",
+                                ultima_actividad=datetime.now(),
+                            )
+                            db.add(device)
+                            db.commit()
+                            db.refresh(device)
+                    break
+        except Exception as e:
+            print("Nota auto-descubrimiento portal:", e)
+
+    categorias_autorizadas, lista_dominios = _obtener_info_filtrado(db)
     ahora = datetime.now()
 
     if device and client_ip not in ("127.0.0.1", "localhost", "::1"):
@@ -61,48 +95,64 @@ def obtener_estado_conexion(
         db.commit()
 
     dev_rol = (getattr(device, "rol", None) or "nivel_1") if device else "nivel_1"
-    host_display = (device.nombre_host if device and device.nombre_host else f"Estación {client_ip}")
+
+    # Determinar nombre e IP seguros para mostrar al alumno
+    ip_segura = ""
+    if device and device.direccion_ip:
+        ip_segura = device.direccion_ip
+    elif client_ip and not client_ip.startswith("172.") and client_ip not in ("192.168.88.1", "127.0.0.1", "localhost", "::1"):
+        ip_segura = client_ip
+
+    if device and device.nombre_host:
+        host_display = device.nombre_host
+    elif ip_segura:
+        host_display = f"Estación {ip_segura}"
+    else:
+        host_display = "Dispositivo en Red"
+
+    info_filtro = {
+        "modo": "lista_blanca",
+        "total_autorizados": len(lista_dominios),
+        "categorias_autorizadas": categorias_autorizadas,
+        "dominios_autorizados": lista_dominios,
+        "total_bloqueados": len(lista_dominios),
+        "categorias_restringidas": categorias_autorizadas,
+    }
 
     # Caso A: Dispositivo no registrado aún
     if not device:
         return {
             "estado": "pendiente",
-            "ip": client_ip,
+            "ip": ip_segura,
+            "mac": mac or "",
             "nombre_host": host_display,
             "rol": "nivel_1",
             "mensaje": "Conectado a la red institucional / local. Esperando autorización del administrador...",
-            "filtrado_web": {
-                "total_bloqueados": len(lista_dominios),
-                "categorias_restringidas": categorias_bloqueadas,
-            },
+            "filtrado_web": info_filtro,
         }
 
     # Caso B: Dispositivo en espera de aprobación
     if device.estado == EstadoDispositivo.pendiente:
         return {
             "estado": "pendiente",
-            "ip": device.direccion_ip or client_ip,
+            "ip": device.direccion_ip or ip_segura,
+            "mac": device.direccion_mac or mac or "",
             "nombre_host": host_display,
             "rol": dev_rol,
             "mensaje": "Tu equipo está conectado. Esperando que el administrador autorice tu acceso...",
-            "filtrado_web": {
-                "total_bloqueados": len(lista_dominios),
-                "categorias_restringidas": categorias_bloqueadas,
-            },
+            "filtrado_web": info_filtro,
         }
 
     # Caso C: Dispositivo rechazado
     if device.estado == EstadoDispositivo.rechazado:
         return {
             "estado": "rechazado",
-            "ip": device.direccion_ip or client_ip,
+            "ip": device.direccion_ip or ip_segura,
+            "mac": device.direccion_mac or mac or "",
             "nombre_host": host_display,
             "rol": dev_rol,
             "mensaje": "El acceso a la red para este equipo está pausado o ha sido restringido.",
-            "filtrado_web": {
-                "total_bloqueados": len(lista_dominios),
-                "categorias_restringidas": categorias_bloqueadas,
-            },
+            "filtrado_web": info_filtro,
         }
 
     # Caso D: Dispositivo aprobado -> calcular tiempo y velocidad asignada
@@ -120,6 +170,16 @@ def obtener_estado_conexion(
     esta_expirada = False
 
     if sesion_activa:
+        # Acumular tiempo activo real neto (descartando tiempo muerto / baches largos de inactividad)
+        ultimo = getattr(sesion_activa, "ultimo_pulso", None) or sesion_activa.inicio
+        delta = (ahora - ultimo).total_seconds()
+        if 0 < delta <= 90:
+            sesion_activa.tiempo_activo_segundos = (getattr(sesion_activa, "tiempo_activo_segundos", 0) or 0) + int(delta)
+        elif delta > 90:
+            sesion_activa.tiempo_activo_segundos = (getattr(sesion_activa, "tiempo_activo_segundos", 0) or 0) + 5
+        sesion_activa.ultimo_pulso = ahora
+        db.commit()
+
         segundos_transcurridos = int((ahora - sesion_activa.inicio).total_seconds())
         limite_minutos = sesion_activa.limite_tiempo_minutos
         if sesion_activa.limite_velocidad_mbps is not None:
@@ -135,7 +195,8 @@ def obtener_estado_conexion(
     if esta_expirada:
         return {
             "estado": "expirado",
-            "ip": device.direccion_ip or client_ip,
+            "ip": device.direccion_ip or ip_segura,
+            "mac": device.direccion_mac or mac or "",
             "nombre_host": host_display,
             "rol": dev_rol,
             "mensaje": "Tu tiempo de conexión asignado ha finalizado.",
@@ -150,7 +211,8 @@ def obtener_estado_conexion(
 
     return {
         "estado": "aprobado",
-        "ip": device.direccion_ip or client_ip,
+        "ip": device.direccion_ip or ip_segura,
+        "mac": device.direccion_mac or mac or "",
         "nombre_host": host_display,
         "rol": dev_rol,
         "mensaje": "¡Conexión activa y autorizada!",
@@ -166,11 +228,7 @@ def obtener_estado_conexion(
             "es_ilimitada": limite_velocidad is None,
             "descripcion": f"{limite_velocidad} Mbps asignados (Control QoS)" if limite_velocidad else "Velocidad estándar de la red",
         },
-        "filtrado_web": {
-            "total_bloqueados": len(lista_dominios),
-            "categorias_restringidas": categorias_bloqueadas,
-            "dominios_bloqueados": lista_dominios,
-        },
+        "filtrado_web": info_filtro,
     }
 
 
@@ -196,10 +254,6 @@ def obtener_estado_alumno(
         .first()
     )
 
-    # Si no tiene sesión asignada específicamente a su ID, tomamos la última sesión activa general
-    # para que en el entorno de laboratorio el alumno conectado a la PC vea su estado real
-    if not sesion_activa:
-        sesion_activa = db.query(Sesion).filter(Sesion.fin.is_(None)).order_by(Sesion.inicio.desc()).first()
 
     tiempo_restante_segundos = None
     segundos_transcurridos = 0
@@ -268,9 +322,12 @@ def obtener_estado_alumno(
             "descripcion": f"{limite_velocidad} Mbps asignados (Control QoS)" if limite_velocidad else "Velocidad estándar del laboratorio",
         },
         "filtrado_web": {
+            "modo": "lista_blanca",
+            "total_autorizados": len(lista_dominios),
+            "categorias_autorizadas": categorias_bloqueadas,
+            "dominios_autorizados": lista_dominios,
             "total_bloqueados": len(lista_dominios),
             "categorias_restringidas": categorias_bloqueadas,
-            "dominios_bloqueados": lista_dominios,
         },
     }
 
@@ -279,6 +336,7 @@ def obtener_estado_alumno(
 def solicitar_acceso(
     request: Request,
     ip: str | None = None,
+    mac: str | None = None,
     db: Session = Depends(get_db),
 ):
     """
@@ -293,9 +351,11 @@ def solicitar_acceso(
         else:
             client_ip = request.client.host if request.client else "127.0.0.1"
 
-    device = db.query(Dispositivo).filter(Dispositivo.direccion_ip == client_ip).first()
-    if not device and client_ip in ("127.0.0.1", "localhost", "::1"):
-        device = db.query(Dispositivo).order_by(Dispositivo.ultima_actividad.desc()).first()
+    device = None
+    if mac and mac.strip():
+        device = db.query(Dispositivo).filter(Dispositivo.direccion_mac == mac.strip().upper()).first()
+    if not device and client_ip and client_ip not in ("192.168.88.1", "127.0.0.1", "localhost", "::1"):
+        device = db.query(Dispositivo).filter(Dispositivo.direccion_ip == client_ip).first()
 
     if not device:
         raise HTTPException(status_code=404, detail="Dispositivo no encontrado")
