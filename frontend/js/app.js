@@ -1876,6 +1876,7 @@ if (btnPurgeOffline) {
             if (res.ok) {
                 mostrarToast(`✓ Se limpiaron ${data.purgados || 0} dispositivos inactivos`);
                 await cargarDispositivos();
+                if (typeof cargarModuloGrupos === "function") await cargarModuloGrupos(true);
             } else {
                 mostrarToast("Error al limpiar dispositivos", true);
             }
@@ -2612,6 +2613,8 @@ if (formPol1) {
                 const resJson = await res.json();
                 cachePoliticasRoles["nivel_1"] = resJson.politica;
                 mostrarToast("✓ Política de Nivel 1 guardada correctamente");
+                if (typeof cargarDispositivos === "function") await cargarDispositivos();
+                if (typeof cargarSesionesActivas === "function") await cargarSesionesActivas();
             } else {
                 mostrarToast("Error al guardar política de Nivel 1", true);
             }
@@ -2648,6 +2651,8 @@ if (formPol2) {
                 const resJson = await res.json();
                 cachePoliticasRoles["nivel_2"] = resJson.politica;
                 mostrarToast("✓ Política de Nivel 2 guardada correctamente");
+                if (typeof cargarDispositivos === "function") await cargarDispositivos();
+                if (typeof cargarSesionesActivas === "function") await cargarSesionesActivas();
             } else {
                 mostrarToast("Error al guardar política de Nivel 2", true);
             }
@@ -4347,12 +4352,29 @@ async function alternarModoAislamientoGlobal() {
     }
 }
 
-// --- LIENZO INTERACTIVO DE RED (Canvas / Nodos / Láser) ---
+// --- LIENZO INTERACTIVO DE RED (Canvas / Nodos / Pan & Zoom / Láser) ---
 
 // Registro de posiciones persistentes para que los dispositivos no cambien de lugar
 const posicionesPersistentesNodos = new Map();
 let nodoEnArrastre = null;
 let arrastreHuboMovimiento = false;
+
+// Variables de Cámara Pan & Zoom en el Lienzo
+let panOffsetX = 0;
+let panOffsetY = 0;
+let canvasZoom = 1.0;
+let isPanningBackground = false;
+let startPanMouseX = 0;
+let startPanMouseY = 0;
+
+function screenToWorldCanvas(clientX, clientY, canvas) {
+    const rect = canvas.getBoundingClientRect();
+    const screenX = clientX - rect.left;
+    const screenY = clientY - rect.top;
+    const worldX = (screenX - panOffsetX) / canvasZoom;
+    const worldY = (screenY - panOffsetY) / canvasZoom;
+    return { worldX, worldY, screenX, screenY, rect };
+}
 
 function renderizarLienzoRedGrupos() {
     const canvas = document.querySelector("#canvas-grafo-grupos");
@@ -4362,7 +4384,7 @@ function renderizarLienzoRedGrupos() {
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
     const width = rect.width || 1000;
-    const height = rect.height || 420;
+    const height = rect.height || 460;
 
     canvas.width = width * dpr;
     canvas.height = height * dpr;
@@ -4372,30 +4394,45 @@ function renderizarLienzoRedGrupos() {
 
     const esModoClaro = document.documentElement.getAttribute("data-theme") === "light";
 
-    // Dibujar cuadrícula de fondo sutil y técnica
+    // Aplicar transformación de Cámara (Pan y Zoom)
     ctx.save();
-    const gridSize = 28;
+    ctx.translate(panOffsetX, panOffsetY);
+    ctx.scale(canvasZoom, canvasZoom);
+
+    // Dibujar cuadrícula infinita en coordenadas del mundo
+    const gridSize = 32;
     ctx.strokeStyle = esModoClaro ? "rgba(203, 213, 225, 0.45)" : "rgba(255, 255, 255, 0.04)";
-    ctx.lineWidth = 1;
-    for (let x = 0; x < width; x += gridSize) {
+    ctx.lineWidth = 1 / canvasZoom;
+
+    const worldLeft = -panOffsetX / canvasZoom;
+    const worldTop = -panOffsetY / canvasZoom;
+    const worldRight = (width - panOffsetX) / canvasZoom;
+    const worldBottom = (height - panOffsetY) / canvasZoom;
+
+    const startX = Math.floor(worldLeft / gridSize) * gridSize;
+    const endX = Math.ceil(worldRight / gridSize) * gridSize;
+    const startY = Math.floor(worldTop / gridSize) * gridSize;
+    const endY = Math.ceil(worldBottom / gridSize) * gridSize;
+
+    for (let x = startX; x <= endX; x += gridSize) {
         ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, height);
+        ctx.moveTo(x, worldTop);
+        ctx.lineTo(x, worldBottom);
         ctx.stroke();
     }
-    for (let y = 0; y < height; y += gridSize) {
+    for (let y = startY; y <= endY; y += gridSize) {
         ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(width, y);
+        ctx.moveTo(worldLeft, y);
+        ctx.lineTo(worldRight, y);
         ctx.stroke();
     }
-    ctx.restore();
 
     // Ordenar dispositivos por id para garantizar orden 100% determinista
     const rawDevices = (cacheDispositivosCanvas || []).slice();
     rawDevices.sort((a, b) => a.id - b.id);
 
     if (rawDevices.length === 0) {
+        ctx.restore();
         ctx.fillStyle = esModoClaro ? "#475569" : "#94a3b8";
         ctx.font = "600 14px 'Plus Jakarta Sans', sans-serif";
         ctx.textAlign = "center";
@@ -4404,11 +4441,9 @@ function renderizarLienzoRedGrupos() {
         return;
     }
 
-    // Calcular posiciones de nodos estables y fijas
+    // Centro del mundo visible por defecto
     const centerX = width / 2;
-    const centerY = height / 2;
-    const radiusX = Math.min(centerX - 90, 380);
-    const radiusY = Math.min(centerY - 70, 140);
+    const centerY = height / 2 - 20;
 
     nodosPosicionesCanvas = rawDevices.map((dev, idx) => {
         let posX, posY;
@@ -4417,9 +4452,26 @@ function renderizarLienzoRedGrupos() {
             posX = p.x;
             posY = p.y;
         } else {
-            const angle = (idx / rawDevices.length) * 2 * Math.PI - Math.PI / 2;
-            posX = centerX + radiusX * Math.cos(angle);
-            posY = centerY + radiusY * Math.sin(angle);
+            const total = rawDevices.length;
+            if (total <= 6) {
+                const radiusX = Math.min(centerX - 120, 360);
+                const radiusY = Math.min(centerY - 80, 140);
+                const angle = (idx / total) * 2 * Math.PI - Math.PI / 2;
+                posX = centerX + radiusX * Math.cos(angle);
+                posY = centerY + radiusY * Math.sin(angle);
+            } else {
+                // Disposición tipo aula / laboratorio con varias filas ordenadas
+                const cols = total > 12 ? 5 : 4;
+                const col = idx % cols;
+                const row = Math.floor(idx / cols);
+                const totalRows = Math.ceil(total / cols);
+                const spacingX = 180;
+                const spacingY = 160;
+                const gridStartX = centerX - ((cols - 1) * spacingX) / 2;
+                const gridStartY = centerY - ((totalRows - 1) * spacingY) / 2;
+                posX = gridStartX + col * spacingX;
+                posY = gridStartY + row * spacingY;
+            }
             posicionesPersistentesNodos.set(dev.id, { x: posX, y: posY });
         }
 
@@ -4602,6 +4654,8 @@ function renderizarLienzoRedGrupos() {
         ctx.restore();
     });
 
+    ctx.restore(); // Restaurar Cámara Pan & Zoom
+
     // Actualizar contador y botón de acción en la barra
     actualizarToolbarSeleccionCanvas();
 }
@@ -4622,7 +4676,7 @@ function actualizarToolbarSeleccionCanvas() {
     }
 }
 
-// Manejo de Interacción con Mouse, Arrastre (Drag & Drop) y Teclado en el Lienzo
+// Manejo de Interacción con Mouse, Arrastre (Drag & Drop), Paneo y Zoom en el Lienzo
 function setupLienzoInteracciones() {
     const canvas = document.querySelector("#canvas-grafo-grupos");
     if (!canvas) return;
@@ -4631,51 +4685,68 @@ function setupLienzoInteracciones() {
     let dragStartY = 0;
 
     canvas.addEventListener("mousedown", (e) => {
-        const rect = canvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
+        if (e.button !== 0) return;
+        const { worldX, worldY, screenX, screenY } = screenToWorldCanvas(e.clientX, e.clientY, canvas);
 
         const nodoClickeado = nodosPosicionesCanvas.find(n => {
-            const dist = Math.hypot(n.x - mouseX, n.y - mouseY);
-            return dist <= n.radius + 6;
+            const dist = Math.hypot(n.x - worldX, n.y - worldY);
+            return dist <= n.radius + 8;
         });
 
         if (nodoClickeado) {
             nodoEnArrastre = nodoClickeado;
             arrastreHuboMovimiento = false;
-            dragStartX = mouseX;
-            dragStartY = mouseY;
+            dragStartX = screenX;
+            dragStartY = screenY;
+            isPanningBackground = false;
+        } else {
+            // Clic en fondo vacío -> Iniciar paneo del mapa
+            isPanningBackground = true;
+            arrastreHuboMovimiento = false;
+            startPanMouseX = screenX;
+            startPanMouseY = screenY;
+            canvas.style.cursor = "grabbing";
         }
     });
 
     canvas.addEventListener("mousemove", (e) => {
-        const rect = canvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
+        const { worldX, worldY, screenX, screenY } = screenToWorldCanvas(e.clientX, e.clientY, canvas);
 
         if (nodoEnArrastre) {
-            const dist = Math.hypot(mouseX - dragStartX, mouseY - dragStartY);
-            if (dist > 3) {
+            const dist = Math.hypot(screenX - dragStartX, screenY - dragStartY);
+            if (dist > 4) {
                 arrastreHuboMovimiento = true;
             }
-            // Limitar al área visible del lienzo
-            const clampedX = Math.max(nodoEnArrastre.radius + 10, Math.min(rect.width - nodoEnArrastre.radius - 10, mouseX));
-            const clampedY = Math.max(nodoEnArrastre.radius + 10, Math.min(rect.height - nodoEnArrastre.radius - 50, mouseY));
-
-            nodoEnArrastre.x = clampedX;
-            nodoEnArrastre.y = clampedY;
-            posicionesPersistentesNodos.set(nodoEnArrastre.device.id, { x: clampedX, y: clampedY });
+            nodoEnArrastre.x = worldX;
+            nodoEnArrastre.y = worldY;
+            posicionesPersistentesNodos.set(nodoEnArrastre.device.id, { x: worldX, y: worldY });
             renderizarLienzoRedGrupos();
             return;
         }
 
-        const hover = nodosPosicionesCanvas.some(n => Math.hypot(n.x - mouseX, n.y - mouseY) <= n.radius + 6);
-        canvas.style.cursor = hover ? "pointer" : "default";
+        if (isPanningBackground) {
+            const dx = screenX - startPanMouseX;
+            const dy = screenY - startPanMouseY;
+            if (Math.hypot(dx, dy) > 3) {
+                arrastreHuboMovimiento = true;
+            }
+            panOffsetX += dx;
+            panOffsetY += dy;
+            startPanMouseX = screenX;
+            startPanMouseY = screenY;
+            renderizarLienzoRedGrupos();
+            return;
+        }
+
+        const hoverNode = nodosPosicionesCanvas.some(n => Math.hypot(n.x - worldX, n.y - worldY) <= n.radius + 8);
+        canvas.style.cursor = hoverNode ? "pointer" : "grab";
     });
 
     window.addEventListener("mouseup", () => {
-        if (nodoEnArrastre) {
-            nodoEnArrastre = null;
+        nodoEnArrastre = null;
+        if (isPanningBackground) {
+            isPanningBackground = false;
+            canvas.style.cursor = "grab";
         }
     });
 
@@ -4685,13 +4756,10 @@ function setupLienzoInteracciones() {
             return;
         }
 
-        const rect = canvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-
+        const { worldX, worldY } = screenToWorldCanvas(e.clientX, e.clientY, canvas);
         const nodoClickeado = nodosPosicionesCanvas.find(n => {
-            const dist = Math.hypot(n.x - mouseX, n.y - mouseY);
-            return dist <= n.radius + 6;
+            const dist = Math.hypot(n.x - worldX, n.y - worldY);
+            return dist <= n.radius + 8;
         });
 
         if (nodoClickeado) {
@@ -4705,6 +4773,76 @@ function setupLienzoInteracciones() {
             renderizarLienzoRedGrupos();
         }
     });
+
+    // Zoom interactivo con la rueda del mouse
+    canvas.addEventListener("wheel", (e) => {
+        e.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        const zoomFactor = e.deltaY < 0 ? 1.15 : 0.87;
+        const newZoom = Math.min(Math.max(canvasZoom * zoomFactor, 0.4), 2.5);
+
+        panOffsetX = mouseX - (mouseX - panOffsetX) * (newZoom / canvasZoom);
+        panOffsetY = mouseY - (mouseY - panOffsetY) * (newZoom / canvasZoom);
+        canvasZoom = newZoom;
+
+        renderizarLienzoRedGrupos();
+    }, { passive: false });
+
+    // Botones de Zoom, Reset y Expansión
+    const btnZoomIn = document.querySelector("#btn-canvas-zoom-in");
+    if (btnZoomIn) {
+        btnZoomIn.addEventListener("click", () => {
+            const rect = canvas.getBoundingClientRect();
+            const cx = rect.width / 2;
+            const cy = rect.height / 2;
+            const newZoom = Math.min(canvasZoom * 1.25, 2.5);
+            panOffsetX = cx - (cx - panOffsetX) * (newZoom / canvasZoom);
+            panOffsetY = cy - (cy - panOffsetY) * (newZoom / canvasZoom);
+            canvasZoom = newZoom;
+            renderizarLienzoRedGrupos();
+        });
+    }
+
+    const btnZoomOut = document.querySelector("#btn-canvas-zoom-out");
+    if (btnZoomOut) {
+        btnZoomOut.addEventListener("click", () => {
+            const rect = canvas.getBoundingClientRect();
+            const cx = rect.width / 2;
+            const cy = rect.height / 2;
+            const newZoom = Math.max(canvasZoom / 1.25, 0.4);
+            panOffsetX = cx - (cx - panOffsetX) * (newZoom / canvasZoom);
+            panOffsetY = cy - (cy - panOffsetY) * (newZoom / canvasZoom);
+            canvasZoom = newZoom;
+            renderizarLienzoRedGrupos();
+        });
+    }
+
+    const btnResetView = document.querySelector("#btn-canvas-reset-view");
+    if (btnResetView) {
+        btnResetView.addEventListener("click", () => {
+            panOffsetX = 0;
+            panOffsetY = 0;
+            canvasZoom = 1.0;
+            posicionesPersistentesNodos.clear();
+            renderizarLienzoRedGrupos();
+            mostrarToast("Vista del mapa restablecida y centrada");
+        });
+    }
+
+    const btnExpand = document.querySelector("#btn-canvas-expand-height");
+    if (btnExpand) {
+        btnExpand.addEventListener("click", () => {
+            const wrap = document.querySelector("#canvas-viewport-wrap");
+            if (wrap) {
+                wrap.classList.toggle("expanded");
+                btnExpand.textContent = wrap.classList.contains("expanded") ? "🤏" : "↕️";
+                setTimeout(() => renderizarLienzoRedGrupos(), 310);
+            }
+        });
+    }
 
     // Navegación con Flechas del Teclado
     window.addEventListener("keydown", (e) => {
@@ -5052,6 +5190,37 @@ function setupGruposListeners() {
         btnLimpiar.addEventListener("click", () => {
             dispositivosSeleccionadosCanvas.clear();
             renderizarLienzoRedGrupos();
+            mostrarToast("Selección del mapa desmarcada");
+        });
+    }
+
+    const btnPurgeCanvas = document.querySelector("#btn-purga-offline-canvas");
+    if (btnPurgeCanvas) {
+        btnPurgeCanvas.addEventListener("click", async () => {
+            if (!confirm("¿Deseas depurar y eliminar todos los equipos que actualmente no están conectados a MikroTik?")) return;
+            try {
+                btnPurgeCanvas.disabled = true;
+                btnPurgeCanvas.textContent = "⏳ Limpiando...";
+                const res = await fetch(`${API_URL}/devices/purge-offline`, {
+                    method: "POST",
+                    headers: getAuthHeaders()
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    mostrarToast(`✓ Se eliminaron ${data.purgados || 0} dispositivos desconectados`);
+                    dispositivosSeleccionadosCanvas.clear();
+                    await cargarModuloGrupos();
+                    if (typeof cargarDispositivos === "function") await cargarDispositivos();
+                } else {
+                    mostrarToast("Error al limpiar dispositivos", true);
+                }
+            } catch (err) {
+                console.error("Error al purgar inactivos desde canvas:", err);
+                mostrarToast("Error al limpiar dispositivos", true);
+            } finally {
+                btnPurgeCanvas.disabled = false;
+                btnPurgeCanvas.textContent = "⚡ Limpiar Desconectados";
+            }
         });
     }
 

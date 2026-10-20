@@ -11,6 +11,9 @@ from pydantic import BaseModel
 from app.database import get_db
 from app.models import Dispositivo, EstadoDispositivo, ConfiguracionModulo, GrupoRed, GrupoMiembro, MensajeGrupo
 from app.routers.activity import deducir_tipo_dispositivo
+from app.routers.devices import check_ip_ping
+from app.config import settings
+from app import routeros_client
 
 router = APIRouter(prefix="/groups", tags=["groups"])
 
@@ -156,6 +159,10 @@ def get_canvas_devices(db: Session = Depends(get_db)):
     Retorna todos los dispositivos aprobados con información de asignación a grupos
     para dibujar el mapa de red interactivo (nodos, conexiones y polígonos).
     """
+    admin_macs = settings.admin_mac_list
+    ahora = datetime.now()
+    real_active_macs = routeros_client.get_mikrotik_active_network_macs()
+
     dispositivos = (
         db.query(Dispositivo)
         .filter(Dispositivo.estado == EstadoDispositivo.aprobado)
@@ -165,7 +172,12 @@ def get_canvas_devices(db: Session = Depends(get_db)):
     resultado = []
 
     for d in dispositivos:
-        en_linea = bool(d.sesiones and any(s.fin is None for s in d.sesiones))
+        mac_norm = (d.direccion_mac or "").strip().upper()
+        es_admin = mac_norm in admin_macs or d.rol == "admin"
+        sesion_activa = any(s.fin is None for s in d.sesiones)
+        actividad_reciente = d.ultima_actividad and (ahora - d.ultima_actividad).total_seconds() < 90
+        esta_presente_red = es_admin or (mac_norm in real_active_macs) or check_ip_ping(d.direccion_ip)
+        en_linea = es_admin or (esta_presente_red and (sesion_activa or bool(actividad_reciente)))
         tipo_disp = deducir_tipo_dispositivo(d.nombre_host, d.direccion_mac)
 
         # Buscar si pertenece a un grupo
@@ -610,6 +622,13 @@ def download_chat_file(mensaje_id: int, db: Session = Depends(get_db)):
     tipo_mime, _ = mimetypes.guess_type(nombre_descarga)
     if not tipo_mime:
         tipo_mime = "application/octet-stream"
+
+    return FileResponse(
+        path=msg.archivo_ruta,
+        filename=nombre_descarga,
+        media_type=tipo_mime,
+    )
+
 
 @router.get("/admin/inbox")
 def get_admin_inbox(db: Session = Depends(get_db)):

@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Dispositivo, EstadoDispositivo, Sesion
+from app.models import Dispositivo, EstadoDispositivo, Sesion, GrupoMiembro, RegistroActividadApp
 from app.config import settings
 from app import routeros_client
 
@@ -610,6 +610,16 @@ def delete_device(device_id: int, db: Session = Depends(get_db)):
     if mac_norm in settings.admin_mac_list or device.rol == "admin":
         raise HTTPException(status_code=403, detail="No se puede eliminar la consola administradora protegida")
 
+    try:
+        db.query(GrupoMiembro).filter(GrupoMiembro.dispositivo_id == device.id).delete(synchronize_session=False)
+    except Exception:
+        pass
+
+    try:
+        db.query(RegistroActividadApp).filter(RegistroActividadApp.dispositivo_id == device.id).delete(synchronize_session=False)
+    except Exception:
+        pass
+
     for s in list(device.sesiones):
         db.delete(s)
 
@@ -626,6 +636,7 @@ def purge_offline_devices(db: Session = Depends(get_db)):
     """
     admin_macs = settings.admin_mac_list
     dispositivos = db.query(Dispositivo).all()
+    ahora = datetime.now()
     real_active_macs = routeros_client.get_mikrotik_active_network_macs()
     eliminados = 0
 
@@ -634,9 +645,16 @@ def purge_offline_devices(db: Session = Depends(get_db)):
         if mac_norm in admin_macs or d.rol == "admin":
             continue
 
-        esta_presente = (mac_norm in real_active_macs) or check_ip_ping(d.direccion_ip)
+        # Verificar presencia y estado activo real
+        sesion_activa = any(s.fin is None for s in d.sesiones)
+        actividad_reciente = d.ultima_actividad and (ahora - d.ultima_actividad).total_seconds() < 90
+        presente_fisico = (mac_norm in real_active_macs) or check_ip_ping(d.direccion_ip)
 
-        if not esta_presente:
+        # Un equipo solo se considera online si responde físicamente y tiene actividad reciente o sesión activa.
+        # Si no tiene actividad activa en este momento, se depura completamente.
+        esta_online = presente_fisico and (sesion_activa or actividad_reciente)
+
+        if not esta_online:
             # 1. Eliminar concesión DHCP remanente en MikroTik para evitar que vuelva a reaparecer
             try:
                 routeros_client.remove_dhcp_lease_mikrotik(
@@ -651,7 +669,18 @@ def purge_offline_devices(db: Session = Depends(get_db)):
             except Exception:
                 pass
 
-            # 3. Eliminar sesiones y dispositivo en la BD local
+            # 3. Eliminar relaciones dependientes para evitar errores de clave foránea en PostgreSQL
+            try:
+                db.query(GrupoMiembro).filter(GrupoMiembro.dispositivo_id == d.id).delete(synchronize_session=False)
+            except Exception:
+                pass
+
+            try:
+                db.query(RegistroActividadApp).filter(RegistroActividadApp.dispositivo_id == d.id).delete(synchronize_session=False)
+            except Exception:
+                pass
+
+            # 4. Eliminar sesiones y dispositivo en la BD local
             for s in list(d.sesiones):
                 db.delete(s)
             db.delete(d)

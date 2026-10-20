@@ -649,7 +649,7 @@
                         <div class="doc-hero-tags">
                             <span class="doc-tag">🐍 Python 3.11</span>
                             <span class="doc-tag">⚡ FastAPI</span>
-                            <span class="doc-tag">🗄️ SQLite</span>
+                            <span class="doc-tag">🗄️ PostgreSQL 15</span>
                             <span class="doc-tag">🌐 RouterOS API</span>
                             <span class="doc-tag">📡 MikroTik RB951G-2HnD</span>
                             <span class="doc-tag">💻 Vanilla JS</span>
@@ -779,7 +779,7 @@
                         <div class="arch-layer arch-layer-data">
                             <div class="arch-layer-label">Capa de Datos y Red Física</div>
                             <div class="arch-items">
-                                <div class="arch-item">🗄️ Base de Datos SQLite<br/><small>networklab.db</small></div>
+                                <div class="arch-item">🗄️ Base de Datos PostgreSQL<br/><small>labdb (PostgreSQL 15)</small></div>
                                 <div class="arch-item">📡 MikroTik RB951G-2HnD<br/><small>RouterOS API :8728</small></div>
                             </div>
                         </div>
@@ -802,8 +802,8 @@
                         <div class="doc-module-card">
                             <div class="doc-module-icon">🛡️</div>
                             <h4>Filtrado Web Inteligente</h4>
-                            <p>Políticas de contenido granular basadas en RouterOS Layer 7 y Address Lists dinámicas. Permite listas blancas de sitios educativos o listas negras de ocio/redes sociales con efecto inmediato.</p>
-                            <div class="doc-module-tags"><span>L7 Protocol</span><span>Address Lists</span><span>DNS Drops</span></div>
+                            <p>Políticas de contenido granular basadas en RouterOS DNS FWD con comodines de subdominio (match-subdomain=yes), DNS Sinkhole (0.0.0.0) y Address Lists dinámicas. Permite listas blancas de sitios educativos con CDNs fluidas y bloqueo inmediato de ocio o redes sociales.</p>
+                            <div class="doc-module-tags"><span>DNS FWD / Wildcards</span><span>Address Lists</span><span>DNS Sinkhole</span></div>
                         </div>
                         <div class="doc-module-card">
                             <div class="doc-module-icon">📊</div>
@@ -869,8 +869,8 @@
                         </div>
                         <div class="doc-tech-item">
                             <div class="doc-tech-logo">🗄️</div>
-                            <div class="doc-tech-name">SQLite + SQLAlchemy</div>
-                            <div class="doc-tech-desc">Persistencia de datos y modelos relacionales</div>
+                            <div class="doc-tech-name">PostgreSQL 15 + SQLAlchemy</div>
+                            <div class="doc-tech-desc">Persistencia de datos y modelos relacionales robustos</div>
                         </div>
                         <div class="doc-tech-item">
                             <div class="doc-tech-logo">🔑</div>
@@ -951,7 +951,7 @@
                             <div class="doc-flow-num">06</div>
                             <div class="doc-flow-body">
                                 <h4>Auditoría y Métricas en Tiempo Real</h4>
-                                <p>Todo el consumo de ancho de banda y eventos del laboratorio se almacenan en SQLite, permitiendo auditorías de uso, detección de abusos y reportes estadísticos claros.</p>
+                                <p>Todo el consumo de ancho de banda y eventos del laboratorio se almacenan en PostgreSQL, permitiendo auditorías de uso, detección de abusos y reportes estadísticos claros.</p>
                             </div>
                         </div>
                     </div>
@@ -962,7 +962,7 @@
                     <div class="doc-footer-logo">🛡️</div>
                     <div class="doc-footer-text">
                         <strong>NetworkLab</strong> — Sistema de Gestión y Control de Laboratorio de Redes<br/>
-                        <span>Desarrollado para MikroTik RouterBOARD 951G-2HnD · FastAPI · SQLite · Chart.js</span>
+                        <span>Desarrollado para MikroTik RouterBOARD 951G-2HnD · FastAPI · PostgreSQL · Chart.js</span>
                     </div>
                     <div class="doc-footer-version">v5.8</div>
                 </div>

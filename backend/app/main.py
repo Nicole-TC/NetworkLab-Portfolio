@@ -1,162 +1,19 @@
 from datetime import datetime, timedelta
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.database import Base, engine, SessionLocal
-from app.models import Usuario, RolUsuario
+from app.models import Usuario, RolUsuario, Sesion
 from app.auth import hashear_clave
 from app.routers import devices, sessions, web_filter, auth, stats, portal, roles, files, messages, activity, groups
 
+# Creación de tablas de forma declarativa mediante SQLAlchemy ORM
 Base.metadata.create_all(bind=engine)
 
-# Garantizar compatibilidad y creación de tablas en español si no existen
-try:
-    with engine.connect() as conn:
-        conn.execute(
-            text(
-                """
-                CREATE TABLE IF NOT EXISTS usuarios (
-                    id SERIAL PRIMARY KEY,
-                    nombre_usuario VARCHAR UNIQUE NOT NULL,
-                    clave_hash VARCHAR NOT NULL,
-                    rol VARCHAR NOT NULL DEFAULT 'alumno',
-                    nombre_completo VARCHAR,
-                    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    esta_activo BOOLEAN DEFAULT TRUE
-                );
-                ALTER TABLE dispositivos ADD COLUMN IF NOT EXISTS usuario_id INTEGER REFERENCES usuarios(id);
-                ALTER TABLE sesiones ADD COLUMN IF NOT EXISTS usuario_id INTEGER REFERENCES usuarios(id);
-                ALTER TABLE sesiones ADD COLUMN IF NOT EXISTS limite_tiempo_minutos INTEGER;
-                ALTER TABLE sesiones ADD COLUMN IF NOT EXISTS esta_expirada BOOLEAN DEFAULT FALSE;
-                ALTER TABLE sesiones ADD COLUMN IF NOT EXISTS limite_velocidad_mbps INTEGER;
-                ALTER TABLE sesiones ADD COLUMN IF NOT EXISTS tiempo_activo_segundos INTEGER DEFAULT 0;
-                ALTER TABLE dispositivos ADD COLUMN IF NOT EXISTS limite_velocidad_mbps INTEGER;
-                ALTER TABLE dispositivos ADD COLUMN IF NOT EXISTS exento_filtro BOOLEAN DEFAULT FALSE;
-                ALTER TABLE dispositivos ADD COLUMN IF NOT EXISTS rol VARCHAR DEFAULT 'nivel_1';
-                UPDATE dispositivos SET usuario_id = NULL, nombre_host = '' WHERE direccion_mac = '16:13:C0:86:B9:89';
-                -- Cerrar sesiones huérfanas legadas que quedaron abiertas por más de 12 horas en pruebas pasadas
-                UPDATE sesiones 
-                SET fin = inicio + INTERVAL '2 hours',
-                    tiempo_activo_segundos = 5400,
-                    esta_expirada = TRUE
-                WHERE fin IS NULL AND inicio < CURRENT_TIMESTAMP - INTERVAL '12 hours';
-                CREATE TABLE IF NOT EXISTS dominios_bloqueados (
 
-                    id SERIAL PRIMARY KEY,
-                    dominio VARCHAR UNIQUE NOT NULL,
-                    categoria VARCHAR,
-                    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    esta_activo BOOLEAN DEFAULT TRUE
-                );
-                ALTER TABLE dominios_bloqueados ADD COLUMN IF NOT EXISTS alcance VARCHAR DEFAULT 'todos';
-                ALTER TABLE dominios_bloqueados ADD COLUMN IF NOT EXISTS dispositivos_ids VARCHAR DEFAULT '';
-                ALTER TABLE dominios_bloqueados ADD COLUMN IF NOT EXISTS tipo VARCHAR DEFAULT 'blanca';
-                CREATE TABLE IF NOT EXISTS politicas_roles (
-                    id SERIAL PRIMARY KEY,
-                    rol VARCHAR UNIQUE NOT NULL,
-                    nombre_visible VARCHAR NOT NULL,
-                    descripcion VARCHAR,
-                    tiempo_defecto_minutos INTEGER DEFAULT 120,
-                    velocidad_defecto_mbps INTEGER DEFAULT 10,
-                    exento_filtro_defecto BOOLEAN DEFAULT FALSE,
-                    permite_reacceso BOOLEAN DEFAULT TRUE,
-                    actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                );
-                CREATE TABLE IF NOT EXISTS archivos_compartidos (
-                    id SERIAL PRIMARY KEY,
-                    nombre_archivo VARCHAR NOT NULL,
-                    nombre_original VARCHAR NOT NULL,
-                    descripcion VARCHAR,
-                    tamano_bytes INTEGER DEFAULT 0,
-                    tipo_mime VARCHAR,
-                    alcance VARCHAR DEFAULT 'todos',
-                    fecha_subida TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    subido_por VARCHAR DEFAULT 'admin'
-                );
-                CREATE TABLE IF NOT EXISTS mensajes_red (
-                    id SERIAL PRIMARY KEY,
-                    titulo VARCHAR NOT NULL,
-                    contenido VARCHAR NOT NULL,
-                    tipo VARCHAR DEFAULT 'info',
-                    alcance VARCHAR DEFAULT 'todos',
-                    dispositivo_id INTEGER,
-                    direccion_ip VARCHAR,
-                    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    activo BOOLEAN DEFAULT TRUE,
-                    creado_por VARCHAR DEFAULT 'admin'
-                );
-                CREATE TABLE IF NOT EXISTS mensaje_lecturas (
-                    id SERIAL PRIMARY KEY,
-                    mensaje_id INTEGER NOT NULL REFERENCES mensajes_red(id) ON DELETE CASCADE,
-                    direccion_ip VARCHAR,
-                    direccion_mac VARCHAR,
-                    nombre_dispositivo VARCHAR,
-                    leido_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                );
-                CREATE TABLE IF NOT EXISTS registro_actividad_app (
-                    id SERIAL PRIMARY KEY,
-                    dispositivo_id INTEGER NOT NULL REFERENCES dispositivos(id) ON DELETE CASCADE,
-                    fecha DATE DEFAULT CURRENT_DATE,
-                    categoria VARCHAR NOT NULL,
-                    aplicacion VARCHAR NOT NULL,
-                    segundos_activos INTEGER DEFAULT 0,
-                    bytes_in BIGINT DEFAULT 0,
-                    bytes_out BIGINT DEFAULT 0,
-                    ultima_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                );
-                CREATE TABLE IF NOT EXISTS configuracion_modulos (
-                    clave VARCHAR PRIMARY KEY,
-                    valor VARCHAR NOT NULL,
-                    actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                );
-                CREATE TABLE IF NOT EXISTS grupos_red (
-                    id SERIAL PRIMARY KEY,
-                    nombre VARCHAR NOT NULL,
-                    color VARCHAR DEFAULT '#6366f1' NOT NULL,
-                    esta_activo BOOLEAN DEFAULT TRUE NOT NULL,
-                    permite_archivos_lider BOOLEAN DEFAULT TRUE NOT NULL,
-                    permite_chat_admin BOOLEAN DEFAULT TRUE NOT NULL,
-                    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS grupo_miembros (
-                    id SERIAL PRIMARY KEY,
-                    grupo_id INTEGER NOT NULL REFERENCES grupos_red(id) ON DELETE CASCADE,
-                    dispositivo_id INTEGER NOT NULL REFERENCES dispositivos(id) ON DELETE CASCADE,
-                    es_lider BOOLEAN DEFAULT FALSE NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS mensajes_grupo (
-                    id SERIAL PRIMARY KEY,
-                    grupo_id INTEGER REFERENCES grupos_red(id) ON DELETE CASCADE,
-                    emisor_ip VARCHAR NOT NULL,
-                    emisor_mac VARCHAR,
-                    emisor_nombre VARCHAR NOT NULL,
-                    receptor_ip VARCHAR,
-                    contenido TEXT NOT NULL,
-                    archivo_nombre VARCHAR,
-                    archivo_ruta VARCHAR,
-                    archivo_tamano INTEGER DEFAULT 0 NOT NULL,
-                    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
-                );
-                DO $$
-                BEGIN
-                    ALTER TYPE rolusuario ADD VALUE IF NOT EXISTS 'nivel_1';
-                    ALTER TYPE rolusuario ADD VALUE IF NOT EXISTS 'nivel_2';
-                EXCEPTION
-                    WHEN duplicate_object THEN null;
-                    WHEN undefined_object THEN null;
-                END $$;
-                """
-            )
-        )
-        conn.commit()
-except Exception as e:
-    print(f"Nota sobre migración de esquema: {e}")
-
-
-def sembrar_usuarios_iniciales():
-    """Crea las cuentas iniciales y políticas de roles por defecto si no existen."""
+def inicializar_datos_sistema():
+    """Inicializa políticas de roles, cuentas por defecto y cierra sesiones obsoletas."""
     db: Session = SessionLocal()
     try:
         roles.asegurar_politicas_base(db)
@@ -182,15 +39,27 @@ def sembrar_usuarios_iniciales():
             )
             db.add(alumno_user)
 
+        # Cerrar sesiones huérfanas legadas abiertas hace más de 12 horas
+        hace_12_horas = datetime.now() - timedelta(hours=12)
+        sesiones_huerfanas = (
+            db.query(Sesion)
+            .filter(Sesion.fin.is_(None), Sesion.inicio < hace_12_horas)
+            .all()
+        )
+        for s in sesiones_huerfanas:
+            s.fin = s.inicio + timedelta(hours=2)
+            s.tiempo_activo_segundos = 5400
+            s.esta_expirada = True
+
         db.commit()
     except Exception as e:
-        print(f"Error al sembrar datos iniciales: {e}")
+        print(f"Nota en inicialización de datos: {e}")
         db.rollback()
     finally:
         db.close()
 
 
-sembrar_usuarios_iniciales()
+inicializar_datos_sistema()
 
 app = FastAPI(title="Lab Network Panel", version="0.2.0")
 

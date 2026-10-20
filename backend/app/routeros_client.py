@@ -217,10 +217,47 @@ def unblock_device(ip_address: str) -> None:
 
 # --- Módulo Hotspot: Control Nativo de Acceso / Portal Cautivo ---
 
+def kick_hotspot_active(mac_address: str, ip_address: str | None = None) -> None:
+    """Remueve la sesión y host de Hotspot para forzar que tome las nuevas reglas de inmediato."""
+    if not mac_address and not ip_address:
+        return
+    mac_norm = (mac_address or "").strip().upper()
+    try:
+        api = get_connection()
+        try:
+            hosts = api.path("ip", "hotspot", "host")
+            for h in list(hosts):
+                m = (h.get("mac-address") or "").strip().upper()
+                addr = (h.get("address") or "").strip()
+                if (mac_norm and m == mac_norm) or (ip_address and addr == ip_address):
+                    hid = h.get(".id") or h.get("id")
+                    if hid:
+                        try:
+                            hosts.remove(hid)
+                        except Exception:
+                            pass
+            actives = api.path("ip", "hotspot", "active")
+            for a in list(actives):
+                m = (a.get("mac-address") or "").strip().upper()
+                addr = (a.get("address") or "").strip()
+                if (mac_norm and m == mac_norm) or (ip_address and addr == ip_address):
+                    aid = a.get(".id") or a.get("id")
+                    if aid:
+                        try:
+                            actives.remove(aid)
+                        except Exception:
+                            pass
+        finally:
+            api.close()
+    except Exception as e:
+        print("Nota cerrando hotspot active/host:", e)
+
+
 def authorize_hotspot_device(mac_address: str, ip_address: str | None = None) -> None:
     """
     Habilita la salida a internet a un equipo agregándolo como 'bypassed' 
     en MikroTik Hotspot IP Bindings (comentario: 'lab-active').
+    Limpia cualquier sesión previa de Hotspot para que la navegación sea instantánea.
     """
     if not mac_address:
         return
@@ -228,9 +265,17 @@ def authorize_hotspot_device(mac_address: str, ip_address: str | None = None) ->
     api = get_connection()
     try:
         bindings = api.path("ip", "hotspot", "ip-binding")
-        for b in bindings:
+        for b in list(bindings):
             if (b.get("mac-address") or "").strip().upper() == mac_norm:
-                return
+                if b.get("type") == "bypassed" and (not ip_address or b.get("address") == ip_address):
+                    # Ya está correctamente en bypass
+                    return
+                eid = b.get(".id") or b.get("id")
+                if eid:
+                    try:
+                        bindings.remove(eid)
+                    except Exception:
+                        pass
         kwargs = {
             "mac-address": mac_norm,
             "type": "bypassed",
@@ -241,6 +286,9 @@ def authorize_hotspot_device(mac_address: str, ip_address: str | None = None) ->
         bindings.add(**kwargs)
     finally:
         api.close()
+
+    # Forzar desconexión de sesión previa en Hotspot para que MikroTik tome el bypass
+    kick_hotspot_active(mac_norm, ip_address)
 
 
 def revoke_hotspot_device(mac_address: str) -> None:
@@ -535,25 +583,19 @@ def sync_whitelist_filter(
             d_clean = d_str.strip().lower()
             res = {d_clean}
             if "google" in d_clean:
-                res.update(["google.com", "gstatic.com", "googleusercontent.com", "googleapis.com"])
+                res.update(["google.com", "gstatic.com", "googleusercontent.com", "googleapis.com", "ggpht.com", "gvt1.com"])
             elif "wikipedia" in d_clean:
                 res.update(["wikipedia.org", "wikimedia.org", "wikidata.org"])
             elif "github" in d_clean:
-                res.update(["github.com", "api.github.com", "githubassets.com", "githubusercontent.com", "github.githubassets.com"])
+                res.update(["github.com", "githubassets.com", "githubusercontent.com", "githubcopilot.com"])
             elif "youtube" in d_clean or "youtu.be" in d_clean:
                 res.update([
-                    "youtube.com", "m.youtube.com", "googlevideo.com", "ytimg.com", "youtu.be",
-                    "google.com", "gstatic.com", "googleapis.com", "ggpht.com", "gvt1.com", "youtubei.googleapis.com"
+                    "youtube.com", "googlevideo.com", "ytimg.com", "youtu.be",
+                    "google.com", "gstatic.com", "googleapis.com", "ggpht.com", "gvt1.com"
                 ])
             return res
 
-        dominios_expandidos_global = set([
-            "connectivitycheck.gstatic.com",
-            "connectivitycheck.android.com",
-            "clients3.google.com",
-            "captive.apple.com",
-        ])
-
+        dominios_expandidos_global = set()
         for r_dom in rules_dominios:
             dominios_expandidos_global.update(expandir_subdominios(r_dom["dominio"]))
 
@@ -561,9 +603,68 @@ def sync_whitelist_filter(
             try:
                 addr_list.add(list=WHITELIST_NAME, address=d, comment="lab-whitelist-entry")
             except Exception as ex:
-                print(f"Nota agregando dominio {d} a address-list:", ex)
+                pass
 
-        # 3. Limpiar reglas anteriores de Lista Blanca en Firewall Filter
+        # 3. Configurar DNS Estático en RouterOS v7 (FWD hacia 8.8.8.8 con match-subdomain=yes + Sinkhole)
+        try:
+            dns_path = api.path("ip", "dns", "static")
+            for entry in list(dns_path):
+                c = entry.get("comment", "")
+                if c.startswith("lab-wl-") or c.startswith("lab-dns-") or c == "lab-wl-block-yt":
+                    eid = entry.get(".id") or entry.get("id")
+                    if eid:
+                        try:
+                            dns_path.remove(eid)
+                        except Exception:
+                            pass
+
+            # A. Sondas esenciales de Windows, Google y Apple (para que Windows y Android no muestren "Sin Internet")
+            system_fwd_domains = [
+                "msftconnecttest.com",
+                "msftncsi.com",
+                "connectivitycheck.gstatic.com",
+                "connectivitycheck.android.com",
+                "clients3.google.com",
+                "captive.apple.com",
+            ]
+            for s_dom in system_fwd_domains:
+                try:
+                    dns_path.add(
+                        name=s_dom,
+                        type="FWD",
+                        comment="lab-wl-dns-sys",
+                        **{"forward-to": "8.8.8.8", "match-subdomain": "yes"}
+                    )
+                except Exception as ex:
+                    print(f"Nota agregando FWD DNS para {s_dom}:", ex)
+
+            # B. FWD para todas las plataformas de la Lista Blanca (con match-subdomain=yes)
+            for d in dominios_expandidos_global:
+                try:
+                    dns_path.add(
+                        name=d,
+                        type="FWD",
+                        comment="lab-wl-dns-fwd",
+                        **{"forward-to": "8.8.8.8", "match-subdomain": "yes"}
+                    )
+                except Exception as ex:
+                    print(f"Nota agregando FWD DNS para {d}:", ex)
+
+            # C. SINKHOLE: Todo otro dominio que no esté en la Lista Blanca se resuelve a 0.0.0.0
+            dns_path.add(
+                regexp=".*",
+                address="0.0.0.0",
+                comment="lab-wl-dns-sinkhole",
+            )
+        except Exception as dns_ex:
+            print("Error configurando DNS static FWD y sinkhole:", dns_ex)
+
+        try:
+            api("ip/dns/cache/flush")
+        except Exception:
+            pass
+
+        # 4. Limpiar reglas anteriores de Lista Blanca en Firewall Filter
         for r in list(filter_path):
             c = r.get("comment", "")
             if c.startswith("lab-wl-") or c.startswith("lab-whitelist-"):
@@ -574,10 +675,18 @@ def sync_whitelist_filter(
                     except Exception:
                         pass
 
-        # 4. Reglas de Firewall Filter para Lista Blanca (Parámetros con guión validados para RouterOS API):
+        # 5. Reglas de Firewall Filter para Lista Blanca:
         rules_to_create = []
 
-        # A. Paso libre total para Admin y Exentos
+        # A. Conexiones ya establecidas y relacionadas (REGLA PRIORITARIA #1 DE FIREWALL)
+        rules_to_create.append({
+            "chain": "forward",
+            "connection-state": "established,related",
+            "action": "accept",
+            "comment": "lab-wl-established",
+        })
+
+        # B. Paso libre total para Admin y Exentos
         rules_to_create.append({
             "chain": "forward",
             "src-address-list": ADMIN_LIST_NAME,
@@ -591,7 +700,7 @@ def sync_whitelist_filter(
             "comment": "lab-wl-exempt-pass",
         })
 
-        # B. Tráfico al servidor local / portal cautivo siempre permitido
+        # C. Tráfico al servidor local / portal cautivo siempre permitido
         rules_to_create.append({
             "chain": "forward",
             "dst-address": "192.168.88.252",
@@ -599,7 +708,7 @@ def sync_whitelist_filter(
             "comment": "lab-wl-local-server",
         })
 
-        # C. Permitir DNS y sincronización de hora NTP (esencial para celulares y certificados TLS)
+        # D. Permitir DNS y NTP
         rules_to_create.append({
             "chain": "forward",
             "protocol": "udp",
@@ -622,7 +731,27 @@ def sync_whitelist_filter(
             "comment": "lab-wl-allow-ntp",
         })
 
-        # D. Si YouTube NO está en la Lista Blanca, BLOQUEARLO EXPLÍCITAMENTE POR TLS/SNI
+        # E. RECHAZAR QUIC (UDP 443) con ICMP port unreachable
+        # Esto previene el error QUIC_NETWORK_IDLE_TIMEOUT y fuerza a Chrome a usar TCP HTTPS instantáneamente
+        rules_to_create.append({
+            "chain": "forward",
+            "protocol": "udp",
+            "dst-port": "443",
+            "action": "reject",
+            "reject-with": "icmp-port-unreachable",
+            "comment": "lab-wl-block-quic",
+        })
+
+        # F. DESCARTAR TRÁFICO HACIA DIRECCIONES SINKHOLE (0.0.0.0)
+        rules_to_create.append({
+            "chain": "forward",
+            "dst-address": "0.0.0.0",
+            "action": "reject",
+            "reject-with": "tcp-reset",
+            "comment": "lab-wl-block-sinkhole",
+        })
+
+        # G. Si YouTube NO está en la Lista Blanca, BLOQUEARLO EXPLÍCITAMENTE POR TLS/SNI
         youtube_autorizado = any("youtube" in r_dom["dominio"] for r_dom in rules_dominios)
         if not youtube_autorizado:
             for y_sni in ["*youtube*", "*googlevideo*", "*ytimg*", "*youtu.be*"]:
@@ -636,18 +765,7 @@ def sync_whitelist_filter(
                     "comment": f"lab-wl-block-yt-{y_sni.strip('*')[:10]}",
                 })
 
-        # E. Reglas TLS de validación de red para celulares (Android / Apple)
-        for c_dom in ["connectivitycheck.gstatic.com", "connectivitycheck.android.com", "clients3.google.com", "captive.apple.com"]:
-            rules_to_create.append({
-                "chain": "forward",
-                "protocol": "tcp",
-                "dst-port": "80,443",
-                "tls-host": f"*{c_dom}*",
-                "action": "accept",
-                "comment": f"lab-wl-probe-{c_dom[:10]}",
-            })
-
-        # F. Reglas TLS-Host por Dominio según su Alcance específico
+        # H. Reglas TLS-Host por Dominio según su Alcance específico (solo seleccionados / todos excepto)
         for r_dom in rules_dominios:
             dom_id = r_dom.get("id", 0)
             alcance = r_dom.get("alcance", "todos")
@@ -655,7 +773,6 @@ def sync_whitelist_filter(
             subdominios = expandir_subdominios(r_dom["dominio"])
 
             if alcance == "solo_seleccionados" and target_ips:
-                # Caso: Solo PCs seleccionadas pueden navegar a este sitio
                 list_name_tgt = f"lab-wl-tgt-{dom_id}"
                 for tip in target_ips:
                     try:
@@ -667,13 +784,13 @@ def sync_whitelist_filter(
                         "chain": "forward",
                         "protocol": "tcp",
                         "dst-port": "443",
-                        "src-address-list": list_name_tgt,
+                        "src-address-list": f"!{list_name_tgt}",
                         "tls-host": f"*{sd}*",
-                        "action": "accept",
-                        "comment": f"lab-wl-tls-sel-{sd[:10]}",
+                        "action": "reject",
+                        "reject-with": "tcp-reset",
+                        "comment": f"lab-wl-tls-block-non-sel-{sd[:10]}",
                     })
             elif alcance == "todos_excepto" and target_ips:
-                # Caso: Toda la red excepto PCs seleccionadas
                 list_name_exc = f"lab-wl-exc-{dom_id}"
                 for tip in target_ips:
                     try:
@@ -681,7 +798,6 @@ def sync_whitelist_filter(
                     except Exception:
                         pass
                 for sd in subdominios:
-                    # 1. Rechazar a las PCs excluidas
                     rules_to_create.append({
                         "chain": "forward",
                         "protocol": "tcp",
@@ -692,54 +808,17 @@ def sync_whitelist_filter(
                         "reject-with": "tcp-reset",
                         "comment": f"lab-wl-tls-exc-{sd[:10]}",
                     })
-                    # 2. Permitir al resto
-                    rules_to_create.append({
-                        "chain": "forward",
-                        "protocol": "tcp",
-                        "dst-port": "443",
-                        "tls-host": f"*{sd}*",
-                        "action": "accept",
-                        "comment": f"lab-wl-tls-{sd[:10]}",
-                    })
-            else:
-                # Caso estándar: Toda la red de alumnos autorizada
-                for sd in subdominios:
-                    rules_to_create.append({
-                        "chain": "forward",
-                        "protocol": "tcp",
-                        "dst-port": "443",
-                        "tls-host": f"*{sd}*",
-                        "action": "accept",
-                        "comment": f"lab-wl-tls-{sd[:14]}",
-                    })
 
-        # G. Permitir conexiones ya establecidas de los dominios autorizados
-        rules_to_create.append({
-            "chain": "forward",
-            "connection-state": "established,related",
-            "action": "accept",
-            "comment": "lab-wl-established",
-        })
-
-        # H. CATCH-ALL: Bloquear todo el resto de la navegación web externa
+        # I. PERMITIR NAVEGACIÓN WEB (TCP 80 y 443)
+        # Los dominios bloqueados ya son filtrados de raíz por DNS (resueltos a 0.0.0.0 y rechazados por la regla F).
+        # Los dominios autorizados navegan con todos sus subdominios y CDNs de video/imágenes sin restricciones.
         rules_to_create.append({
             "chain": "forward",
             "protocol": "tcp",
             "dst-port": "80,443",
-            "action": "reject",
-            "reject-with": "tcp-reset",
-            "comment": "lab-wl-block-others",
+            "action": "accept",
+            "comment": "lab-wl-allow-web-traffic",
         })
-        # Rechazo inmediato de QUIC (UDP 443) para forzar failover instantáneo a TCP TLS sin demora de espera
-        rules_to_create.append({
-            "chain": "forward",
-            "protocol": "udp",
-            "dst-port": "443",
-            "action": "reject",
-            "reject-with": "icmp-port-unreachable",
-            "comment": "lab-wl-block-quic",
-        })
-
 
         # Crear cada regla individualmente
         created_rule_ids = []
@@ -753,44 +832,12 @@ def sync_whitelist_filter(
                 print(f"Nota agregando regla de firewall ({r_args.get('comment')}):", r_err)
 
         # Mover las reglas de la Lista Blanca hacia la posición superior manteniendo el orden correcto
-        # (se itera en reversa para que la primera regla de la lista quede en la posición 0)
         try:
             for rid in reversed(created_rule_ids):
                 try:
                     api("ip/firewall/filter/move", numbers=rid, destination=0)
                 except Exception:
                     pass
-        except Exception:
-            pass
-
-        # 5. DNS estático sinkhole para YouTube si no está autorizado
-        try:
-            dns_path = api.path("ip", "dns", "static")
-            for entry in list(dns_path):
-                if entry.get("comment") == "lab-wl-block-yt":
-                    eid = entry.get(".id") or entry.get("id")
-                    if eid:
-                        try:
-                            dns_path.remove(eid)
-                        except Exception:
-                            pass
-
-            if not youtube_autorizado:
-                for y_dom in ["youtube.com", "www.youtube.com", "m.youtube.com", "googlevideo.com", "youtu.be"]:
-                    try:
-                        dns_path.add(
-                            name=y_dom,
-                            address="0.0.0.0",
-                            comment="lab-wl-block-yt",
-                        )
-                    except Exception:
-                        pass
-        except Exception as dns_ex:
-            print("Nota ajustando DNS para YouTube:", dns_ex)
-
-        # 6. Flush de caché DNS del router
-        try:
-            api("ip/dns/cache/flush")
         except Exception:
             pass
 
@@ -898,6 +945,10 @@ def remove_dns_block(domain: str) -> None:
 def get_dns_blocks() -> list[str]:
     api = get_connection()
     try:
+        dns_stat = api.path("ip", "dns", "static")
+        fwd_names = [e.get("name") for e in dns_stat if e.get("type") == "FWD" and e.get("name") and e.get("comment") == "lab-wl-dns-fwd"]
+        if fwd_names:
+            return sorted(list(set(fwd_names)))
         addr_list = api.path("ip", "firewall", "address-list")
         return [e.get("address") for e in addr_list if e.get("list") == WHITELIST_NAME and e.get("address")]
     except Exception:
@@ -929,8 +980,7 @@ def check_router_connection() -> dict:
     try:
         api = get_connection()
         uptime = "Activo"
-        cpu_load = "0%"
-        board_name = "MikroTik RB750Gr3"
+        version = ""
         try:
             res = list(api.path("system", "resource"))
             if res:
@@ -939,6 +989,7 @@ def check_router_connection() -> dict:
                 uptime = raw_up
                 cpu_load = f"{r.get('cpu-load', '0')}%"
                 board_name = str(r.get("board-name", "RB750Gr3"))
+                version = str(r.get("version", ""))
         except Exception:
             pass
         finally:
@@ -952,6 +1003,7 @@ def check_router_connection() -> dict:
             "uptime": uptime,
             "cpu_load": cpu_load,
             "board_name": board_name,
+            "version": version,
             "error": None,
         }
     except Exception as e:

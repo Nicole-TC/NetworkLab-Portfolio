@@ -4,7 +4,9 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
 from app.database import get_db
-from app.models import PoliticaRol
+from app.models import PoliticaRol, Dispositivo, EstadoDispositivo, Sesion
+from app.config import settings
+from app import routeros_client
 
 router = APIRouter(prefix="/roles", tags=["roles"])
 
@@ -108,6 +110,39 @@ def update_role_policy(rol: str, data: PoliticaUpdate, db: Session = Depends(get
         politica.permite_reacceso = data.permite_reacceso
 
     politica.actualizado_en = datetime.now()
+
+    # Propagar cambios de velocidad y exención a todos los dispositivos y sesiones activas del rol
+    dispositivos_rol = db.query(Dispositivo).filter(Dispositivo.rol == rol_norm).all()
+    for dev in dispositivos_rol:
+        if data.velocidad_defecto_mbps is not None:
+            dev.limite_velocidad_mbps = data.velocidad_defecto_mbps
+        if data.exento_filtro_defecto is not None:
+            dev.exento_filtro = data.exento_filtro_defecto
+
+        # Actualizar sesión activa
+        sesion_activa = (
+            db.query(Sesion)
+            .filter(Sesion.dispositivo_id == dev.id, Sesion.fin.is_(None))
+            .first()
+        )
+        if sesion_activa:
+            if data.velocidad_defecto_mbps is not None:
+                sesion_activa.limite_velocidad_mbps = data.velocidad_defecto_mbps
+            # Si el equipo está aprobado y tiene IP, actualizar Simple Queue en MikroTik de inmediato
+            if dev.estado == EstadoDispositivo.aprobado and dev.direccion_ip:
+                try:
+                    routeros_client.set_bandwidth_limit(dev.direccion_ip, data.velocidad_defecto_mbps)
+                except Exception as ex_qos:
+                    print(f"Error actualizando QoS en MikroTik para {dev.direccion_ip}:", ex_qos)
+
+    # Si cambió la política de exención de filtro web, resincronizar en MikroTik
+    if data.exento_filtro_defecto is not None:
+        try:
+            from app.routers.web_filter import sync_all_whitelist_to_router
+            sync_all_whitelist_to_router(db)
+        except Exception as ex_sync:
+            print("Error sincronizando filtro tras actualizar política:", ex_sync)
+
     db.commit()
     db.refresh(politica)
 

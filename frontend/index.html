@@ -624,8 +624,11 @@
                             <button type="button" id="btn-crear-grupo-seleccion" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 6px;" disabled>
                                 ✨ Formar Grupo con Seleccionados
                             </button>
-                            <button type="button" id="btn-limpiar-seleccion-canvas" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: 6px;">
-                                🧹 Limpiar
+                            <button type="button" id="btn-limpiar-seleccion-canvas" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: 6px;" title="Deseleccionar todos los equipos marcados">
+                                🧹 Deseleccionar
+                            </button>
+                            <button type="button" id="btn-purga-offline-canvas" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: 6px;" title="Eliminar de la red y MikroTik los equipos que no estén conectados">
+                                ⚡ Limpiar Desconectados
                             </button>
                             <button type="button" id="btn-recargar-canvas-grupos" class="btn btn-secondary" title="Actualizar mapa">
                                 🔄
@@ -634,10 +637,19 @@
                     </div>
 
                     <!-- Contenedor del Lienzo con Canvas -->
-                    <div class="canvas-viewport-wrapper">
-                        <canvas id="canvas-grafo-grupos" width="1000" height="420"></canvas>
+                    <div class="canvas-viewport-wrapper" id="canvas-viewport-wrap">
+                        <canvas id="canvas-grafo-grupos" width="1000" height="460"></canvas>
+                        
+                        <!-- Controles flotantes de navegación (Pan & Zoom) -->
+                        <div class="canvas-nav-controls">
+                            <button type="button" id="btn-canvas-zoom-in" class="canvas-nav-btn" title="Acercar mapa (Zoom In)">➕</button>
+                            <button type="button" id="btn-canvas-zoom-out" class="canvas-nav-btn" title="Alejar mapa (Zoom Out)">➖</button>
+                            <button type="button" id="btn-canvas-reset-view" class="canvas-nav-btn" title="Restablecer vista y centrar">🎯</button>
+                            <button type="button" id="btn-canvas-expand-height" class="canvas-nav-btn" title="Expandir / Reducir altura del mapa">↕️</button>
+                        </div>
+
                         <div class="canvas-instructions-overlay">
-                            <span>💡 Haz clic en los dispositivos o usa las flechas del teclado para enlazarlos con líneas luminosas.</span>
+                            <span>💡 Arrastra el fondo para moverte • Rueda para zoom • Clic para seleccionar • Arrastra equipos para ordenarlos</span>
                         </div>
                     </div>
                 </div>

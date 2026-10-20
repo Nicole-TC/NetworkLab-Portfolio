@@ -213,43 +213,20 @@ def clasificar_conexion(dst_ip: str, dst_port: int, proto: str, domain_resolved:
     return None
 
 
-def analizar_trafico_mikrotik_ip(ip: str) -> dict:
-    """
-    Inspecciona la tabla de conexiones en tiempo real de MikroTik Y la caché DNS del router
-    para una IP, identificando exactamente los sitios web y aplicaciones en uso.
-    """
-    if not ip or ip in ("127.0.0.1", "localhost", "::1"):
-        return {"actividad": "Inactivo", "categoria": "general", "apps": [], "apps_detalle": [], "bytes_in": 0, "bytes_out": 0}
+import socket
 
-    conexiones = []
-    dns_map = {}
 
+def router_esta_alcanzable(timeout: float = 0.4) -> bool:
+    """Verificación ultrarrápida del socket TCP para no bloquear la UI si MikroTik está desconectado."""
     try:
-        api = routeros_client.get_connection()
+        with socket.create_connection((settings.routeros_host, settings.routeros_port), timeout=timeout):
+            return True
+    except Exception:
+        return False
 
-        # 1. Leer caché DNS activa de MikroTik para asociar IPs con nombres de dominios
-        try:
-            dns_cache = api.path("ip", "dns", "cache")
-            for entry in dns_cache:
-                d_name = entry.get("name")
-                d_data = entry.get("data") or entry.get("address")
-                if d_name and d_data:
-                    dns_map[str(d_data).strip()] = str(d_name).strip().lower()
-        except Exception:
-            pass
 
-        # 2. Filtrar conexiones donde la IP es origen o destino
-        conn_path = api.path("ip", "firewall", "connection")
-        for c in conn_path:
-            src = c.get("src-address", "")
-            dst = c.get("dst-address", "")
-            if ip in src or ip in dst:
-                conexiones.append(c)
-
-        api.close()
-    except Exception as e:
-        conexiones = []
-
+def _procesar_conexiones_para_ip(conexiones: list, dns_map: dict) -> dict:
+    """Clasifica una lista de conexiones y devuelve la actividad y aplicaciones detectadas."""
     apps_detectadas_map = {}
     total_bytes = 0
 
@@ -286,11 +263,9 @@ def analizar_trafico_mikrotik_ip(ip: str) -> dict:
             apps_detectadas_map[nom]["bytes"] += c_bytes
             apps_detectadas_map[nom]["conexiones"] += 1
 
-    # Ordenar aplicaciones detectadas por bytes transferidos
     apps_ordenadas = sorted(apps_detectadas_map.values(), key=lambda x: x["bytes"], reverse=True)
     lista_nombres_apps = [a["nombre"] for a in apps_ordenadas] or ["Navegación Web"]
 
-    # Determinar actividad principal
     if apps_ordenadas:
         app_top = apps_ordenadas[0]
         actividad = f"{app_top['icono']} {app_top['nombre']}"
@@ -310,6 +285,87 @@ def analizar_trafico_mikrotik_ip(ip: str) -> dict:
         "conexiones_activas": len(conexiones),
         "total_bytes": total_bytes,
     }
+
+
+def analizar_trafico_mikrotik_batch(ips: list[str]) -> dict[str, dict]:
+    """
+    Inspecciona en UNA SOLA conexión a MikroTik todo el tráfico activo para todas las IPs solicitadas.
+    Si el router está desconectado, responde de inmediato (<0.4s) sin colgar la interfaz.
+    """
+    resultado_default = {
+        "actividad": "💤 Inactivo / En Reposo",
+        "categoria": "general",
+        "apps": ["Navegación Web"],
+        "apps_detalle": [],
+        "conexiones_activas": 0,
+        "total_bytes": 0,
+    }
+    respuestas = {ip: dict(resultado_default) for ip in ips if ip}
+
+    # Si MikroTik no está alcanzable por TCP de inmediato, devolver sin esperas bloqueantes
+    if not router_esta_alcanzable(0.4):
+        return respuestas
+
+    try:
+        api = routeros_client.get_connection()
+        dns_map = {}
+        # 1. Leer caché DNS una sola vez
+        try:
+            dns_cache = api.path("ip", "dns", "cache")
+            for entry in dns_cache:
+                d_name = entry.get("name")
+                d_data = entry.get("data") or entry.get("address")
+                if d_name and d_data:
+                    dns_map[str(d_data).strip()] = str(d_name).strip().lower()
+        except Exception:
+            pass
+
+        # 2. Leer conexiones una sola vez y agrupar por IP
+        conexiones_por_ip = {ip: [] for ip in ips if ip}
+        try:
+            conn_path = api.path("ip", "firewall", "connection")
+            for c in conn_path:
+                src_ip = (c.get("src-address") or "").split(":")[0]
+                dst_ip = (c.get("dst-address") or "").split(":")[0]
+                if src_ip in conexiones_por_ip:
+                    conexiones_por_ip[src_ip].append(c)
+                elif dst_ip in conexiones_por_ip:
+                    conexiones_por_ip[dst_ip].append(c)
+        except Exception:
+            pass
+
+        api.close()
+
+        # 3. Procesar resultados en memoria
+        for ip, conns in conexiones_por_ip.items():
+            respuestas[ip] = _procesar_conexiones_para_ip(conns, dns_map)
+
+    except Exception:
+        pass
+
+    return respuestas
+
+
+def analizar_trafico_mikrotik_ip(ip: str) -> dict:
+    """Wrapper para un solo dispositivo compatible con llamadas individuales."""
+    if not ip or ip in ("127.0.0.1", "localhost", "::1"):
+        return {
+            "actividad": "Inactivo",
+            "categoria": "general",
+            "apps": [],
+            "apps_detalle": [],
+            "conexiones_activas": 0,
+            "total_bytes": 0,
+        }
+    res = analizar_trafico_mikrotik_batch([ip])
+    return res.get(ip, {
+        "actividad": "💤 Inactivo / En Reposo",
+        "categoria": "general",
+        "apps": ["Navegación Web"],
+        "apps_detalle": [],
+        "conexiones_activas": 0,
+        "total_bytes": 0,
+    })
 
 
 def registrar_pulso_actividad(db: Session, dispositivo_id: int, categoria: str, app_nombre: str, segundos: int, b_in: int, b_out: int):
@@ -365,13 +421,24 @@ def list_activity_devices(db: Session = Depends(get_db)):
     hoy = datetime.now().date()
     resultado = []
 
+    # 1. Analizar tráfico de todas las IPs en UNA SOLA llamada batch no bloqueante
+    todas_ips = [d.direccion_ip for d in dispositivos if d.direccion_ip]
+    mapa_trafico = analizar_trafico_mikrotik_batch(todas_ips)
+
     for d in dispositivos:
         mac_norm = (d.direccion_mac or "").strip().upper()
         es_admin = mac_norm in admin_macs or d.rol == "admin"
         tipo_disp = deducir_tipo_dispositivo(d.nombre_host, d.direccion_mac)
 
-        # Analizar tráfico MikroTik en vivo
-        trafico_vivo = analizar_trafico_mikrotik_ip(d.direccion_ip)
+        # Tráfico MikroTik obtenido del batch instantáneo
+        trafico_vivo = mapa_trafico.get(d.direccion_ip) or {
+            "actividad": "💤 Inactivo / En Reposo",
+            "categoria": "general",
+            "apps": ["Navegación Web"],
+            "apps_detalle": [],
+            "conexiones_activas": 0,
+            "total_bytes": 0,
+        }
 
         # Totalizar minutos y bytes registrados hoy en la base de datos
         registros_hoy = (
