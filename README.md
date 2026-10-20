@@ -1,6 +1,6 @@
 # 🛡️ NetworkLab — Plataforma de Gestión de Red y Control de Laboratorios
 ### 👩‍💻 Autora, Diseño & Desarrollo: **Nicole Tacuri**
-**Prácticas Profesionalizantes — Tecnicatura Superior en Analista de Sistemas**  
+**Prácticas Profesionalizantes — Tecnicatura Superior en Analista de Sistemas ISFT 177**  
 *Router MikroTik RouterBOARD 951G-2HnD / hEX (RB750Gr3)*
 
 <p align="center">
@@ -678,13 +678,13 @@ Este proyecto fue ideado, diseñado y desarrollado íntegramente por:
 
 * **Autora y Desarrolladora**: **Nicole Tacuri**
 * **Rol**: Concepción de la idea original, arquitectura de software en capas, diseño de interfaz de usuario (UI/UX), ingeniería de red y políticas de firewall en MikroTik RouterOS, y desarrollo Full-Stack integral (FastAPI, PostgreSQL 16, Vanilla JS, Three.js y Docker Compose).
-* **Carrera**: **Tecnicatura Superior en Analista de Sistemas**
-* **Materia**: **Prácticas Profesionalizantes**
+* **Carrera**: **Tecnicatura Superior en Analista de Sistemas ISFT 177**
+* **Materia**: **Prácticas Profesionalizantes III**
 
 ---
 
 <p align="center">
   <strong>NetworkLab</strong> — Ideado, Diseñado y Desarrollado por <strong>Nicole Tacuri</strong>.<br>
-  <em>Tecnicatura Superior en Analista de Sistemas · Prácticas Profesionalizantes</em><br>
+  <em>Tecnicatura Superior en Analista de Sistemas ISFT 177 · Prácticas Profesionalizantes III</em><br>
   <em>MikroTik RouterBOARD · FastAPI · PostgreSQL · Nginx · Three.js</em>
 </p>
