@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>NetworkLab — Portal de Conexión</title>
+    <meta name="description" content="Portal de conexión para estaciones de trabajo y dispositivos móviles. Estado de red, tiempo de sesión, comunicados y materiales de clase." />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="alternate icon" href="favicon.ico" />
+    <link rel="apple-touch-icon" href="favicon.png" />
+    <link rel="stylesheet" href="css/style.css?v=7.0" />
+</head>
+
+<body>
+<div id="page-loader" class="page-loader">
+    <div class="loader-brand">🛡️ NetworkLab</div>
+    <div class="loader-dots">
+      <span></span><span></span><span></span><span></span>
+    </div>
+    <div class="loader-bar-wrap"><div class="loader-bar"></div></div>
+    <div class="loader-text">Iniciando sistema de red...</div>
+</div>
+<script>
+  window.addEventListener("load", function() {
+    setTimeout(function() {
+      var l = document.getElementById("page-loader");
+      if (l) { l.classList.add("hidden"); setTimeout(function(){ l.remove(); }, 600); }
+    }, 700);
+  });
+</script>
+
+    <header>
+        <div class="header-left">
+            <h1 class="header-brand">🛡️ NetworkLab</h1>
+            <span class="subtitle">Portal de Conexión de Red</span>
+        </div>
+        <div class="header-right" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <button id="btn-toggle-theme" type="button" class="btn-theme-toggle" title="Cambiar a Modo Claro / Oscuro">
+                <span id="theme-toggle-icon">☀️</span>
+                <span id="theme-toggle-text">Modo Claro</span>
+            </button>
+            <button id="btn-activar-notificaciones" type="button" class="btn-notif-toggle" title="Activa avisos con sonido en este dispositivo">
+                🔔 <span id="txt-btn-notif">Activar Notificaciones</span>
+            </button>
+            <div class="user-badge">
+                <span id="txt-nombre-usuario">Estación de Trabajo</span>
+                <span class="user-role-badge role-nivel1" id="badge-rol-usuario">NIVEL 1</span>
+            </div>
+            <button id="btn-logout" class="btn-logout" style="display: none;">Cerrar sesión</button>
+        </div>
+    </header>
+
+    <main class="portal-page">
+        <!-- Banner de Comunicados y Alertas en Red -->
+        <div id="banner-comunicado-red" style="display: none; width: 100%; max-width: 800px; margin: 0 auto 20px; border-radius: 12px; padding: 16px 20px; transition: all 0.3s ease;">
+            <div style="display: flex; align-items: flex-start; gap: 14px;">
+                <span id="icono-comunicado" style="font-size: 1.8rem; line-height: 1;">📢</span>
+                <div style="flex: 1;">
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px; flex-wrap: wrap;">
+                        <h4 id="titulo-comunicado" class="banner-comunicado-titulo" style="margin: 0; font-size: 1.05rem; font-weight: 700;">Aviso de Red</h4>
+                        <span id="badge-tipo-comunicado" class="badge" style="font-size: 0.72rem; background: rgba(0, 229, 255, 0.2); color: #00E5FF;">COMUNICADO</span>
+                    </div>
+                    <p id="texto-comunicado" class="banner-comunicado-texto" style="margin: 0; font-size: 0.92rem; line-height: 1.5;"></p>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 6px; align-items: flex-end;">
+                    <button type="button" id="btn-marcar-leido" class="btn btn-marcar-leido">
+                        ✓ Marcar como leído
+                    </button>
+                    <button type="button" id="btn-cerrar-comunicado" style="background: none; border: none; color: var(--color-texto-suave, #94A3B8); font-size: 0.75rem; cursor: pointer; text-decoration: underline;">
+                        Ocultar por ahora
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- VISTA 0: Cargando inicial -->
+        <div id="vista-cargando" style="text-align: center; padding: 60px 20px;">
+            <div class="pulse-indicator">
+                <span class="pulse-dot"></span> Verificando estado de red con el router MikroTik...
+            </div>
+        </div>
+
+        <!-- VISTA 1: En espera de aprobación (SALA DE ESPERA / PORTAL CAUTIVO) -->
+        <section id="vista-espera" class="portal-waiting-card" style="display: none;">
+            <div class="waiting-icon-container">
+                ⏳
+            </div>
+            <h2 style="font-size: 1.6rem; margin: 0 0 10px; color: #f8fafc; font-weight: 800;">
+                Estación Conectada a la Red
+            </h2>
+            <p style="color: var(--color-texto-suave); font-size: 1.05rem; margin: 0 0 24px; line-height: 1.6;">
+                Tu dispositivo se ha conectado a la red local del laboratorio.<br />
+                <strong style="color: #00F0FF;">Esperando que el docente o administrador autorice tu acceso...</strong>
+            </p>
+
+            <div style="display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; margin-bottom: 24px;">
+                <div style="background: rgba(0, 240, 255, 0.04); border: 1px solid rgba(0, 240, 255, 0.18); padding: 12px 20px; border-radius: 10px;">
+                    <small style="color: var(--color-texto-suave); display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Dispositivo:</small>
+                    <strong id="espera-equipo" style="color: #00F0FF; font-size: 0.95rem;">Detectando...</strong>
+                </div>
+                <div style="background: rgba(0, 240, 255, 0.04); border: 1px solid rgba(0, 240, 255, 0.18); padding: 12px 20px; border-radius: 10px;">
+                    <small style="color: var(--color-texto-suave); display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Dirección IP:</small>
+                    <strong id="espera-ip" style="color: #38BDF8; font-size: 0.95rem;">—</strong>
+                </div>
+                <div style="background: rgba(245, 158, 11, 0.05); border: 1px solid rgba(245, 158, 11, 0.25); padding: 12px 20px; border-radius: 10px;">
+                    <small style="color: var(--color-texto-suave); display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Estado de Red:</small>
+                    <span class="badge badge-pending">En espera de aprobación</span>
+                </div>
+            </div>
+
+            <!-- TARJETA DE ASISTENCIA PARA CELULARES Y TABLETS -->
+            <div style="background: rgba(37, 99, 235, 0.08); border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 12px; padding: 18px; margin: 0 auto 24px; max-width: 560px; text-align: center;">
+                <div style="font-size: 0.98rem; font-weight: 700; color: #38bdf8; margin-bottom: 6px;">📱 ¿Conectándote desde un Celular?</div>
+                <p style="font-size: 0.85rem; color: #cbd5e1; margin: 0 0 14px; line-height: 1.5;">
+                    Al autorizar tu conexión, Android o iOS pueden cerrar automáticamente esta mini-pantalla de inicio de sesión. Toca aquí para abrir el portal en <strong>Google Chrome</strong> y mantener tus archivos y avisos siempre accesibles:
+                </p>
+                <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                    <a id="btn-intent-espera" href="#" class="btn-chrome-intent">
+                        🚀 Abrir en Google Chrome
+                    </a>
+                    <button type="button" id="btn-copiar-enlace-espera" class="btn" style="background: rgba(255,255,255,0.06); color: #f8fafc; border: 1px solid rgba(255,255,255,0.18); padding: 10px 16px; border-radius: 10px; font-size: 0.86rem; cursor: pointer;">
+                        📋 Copiar Enlace
+                    </button>
+                </div>
+            </div>
+
+            <p style="font-size: 0.85rem; color: var(--color-texto-suave); max-width: 500px; margin: 0 auto 12px; line-height: 1.5;">
+                No necesitas recargar esta página. En cuanto el docente autorice tu equipo desde el panel central, tu conexión a internet se activará automáticamente con el tiempo y velocidad asignados.
+            </p>
+
+            <div class="pulse-indicator">
+                <span class="pulse-dot"></span> Sincronizando en tiempo real con el router...
+            </div>
+        </section>
+
+        <!-- VISTA 2: Aprobado (CONEXIÓN ACTIVA CON TIMER Y POLÍTICAS) -->
+        <div id="vista-activa" style="display: none;">
+            <!-- Tarjeta Principal: Reloj y Tiempo de Conexión -->
+            <section class="portal-hero-card">
+                <p class="portal-user-greeting">¡Conexión Autorizada y Activa!</p>
+                <div id="reloj-tiempo" class="portal-clock-display">--:--</div>
+                <p id="subtexto-tiempo" style="color: var(--color-texto-suave); font-size: 0.95rem; margin: 0 0 16px;">
+                    Calculando tiempo disponible...
+                </p>
+                <div id="banner-alerta" style="display: none; padding: 10px; border-radius: 8px; font-weight: 600; margin-bottom: 16px;"></div>
+
+                <div style="display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; font-size: 0.85rem; color: var(--color-texto-suave); border-top: 1px solid var(--color-borde); padding-top: 16px;">
+                    <span>🖥️ <strong>Equipo:</strong> <span id="info-equipo">—</span></span>
+                    <span>🌐 <strong>IP:</strong> <span id="info-ip">—</span></span>
+                    <span>🟢 <strong>Estado:</strong> <span id="info-estado">Aprobado</span></span>
+                </div>
+            </section>
+
+            <!-- Acceso rápido en celular si está en captive portal -->
+            <div id="banner-celular-activo" style="display: flex; justify-content: space-between; align-items: center; background: rgba(37, 99, 235, 0.08); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 12px; padding: 12px 18px; margin-top: 16px; flex-wrap: wrap; gap: 10px;">
+                <div style="font-size: 0.88rem; color: #e2e8f0; display: flex; align-items: center; gap: 8px;">
+                    <span>💡</span>
+                    <span><strong>Para comunicados y materiales en tu celular:</strong> Deja esta pestaña abierta o ábrela en tu navegador.</span>
+                </div>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <a id="btn-intent-activo" href="#" class="btn-chrome-intent" style="padding: 8px 16px; font-size: 0.85rem;">
+                        🚀 Abrir en navegador
+                    </a>
+                    <button id="btn-cerrar-banner-celular" type="button" title="Ocultar este aviso" style="background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.15); color: #94a3b8; border-radius: 8px; width: 32px; height: 32px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1rem; transition: all 0.2s;">
+                        ✕
+                    </button>
+                </div>
+            </div>
+
+            <!-- Grilla de 2 Columnas: QoS y Filtro Web -->
+            <div class="portal-grid-2" style="margin-top: 20px;">
+                <!-- Tarjeta: Límite de Velocidad (QoS) -->
+                <div class="portal-subcard">
+                    <h3>⚡ Velocidad Asignada (QoS)</h3>
+                    <p style="color: var(--color-texto-suave); font-size: 0.88rem; line-height: 1.5; margin: 0 0 16px;">
+                        El administrador ha establecido la siguiente política de velocidad para esta estación:
+                    </p>
+                    <div style="margin-bottom: 16px;">
+                        <span id="badge-velocidad-portal" class="badge badge-qos" style="font-size: 1rem; padding: 6px 14px;">
+                            ⚡ Ilimitada
+                        </span>
+                    </div>
+                    <p id="desc-velocidad" style="font-size: 0.82rem; color: var(--color-texto-suave); margin: 0;">
+                        Dispones del ancho de banda estándar para tus actividades.
+                    </p>
+                </div>
+
+                <!-- Tarjeta: Políticas de Filtrado Web (Lista Blanca) -->
+                <div class="portal-subcard">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <h3 style="margin: 0;">🛡️ Filtrado Web: Lista Blanca</h3>
+                        <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #86EFAC; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 0.72rem; padding: 2px 8px;">
+                            🛡️ Solo Sitios Autorizados
+                        </span>
+                    </div>
+                    <p style="color: var(--color-texto-suave); font-size: 0.88rem; line-height: 1.5; margin: 0 0 12px;">
+                        Durante tu sesión rige la política de <strong>Lista Blanca Educativa</strong>. Solo puedes navegar en los siguientes dominios y plataformas autorizadas:
+                    </p>
+                    <div>
+                        <strong style="font-size: 0.8rem; color: #86EFAC; text-transform: uppercase;">✅ Sitios y Plataformas Autorizadas:</strong>
+                        <div id="lista-categorias-bloqueadas" class="domain-pill-list" style="margin-top: 6px;">
+                            <span class="allowed-pill">Cargando sitios permitidos...</span>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 14px; padding: 10px 12px; background: rgba(239, 68, 68, 0.06); border-radius: 8px; border: 1px solid rgba(239, 68, 68, 0.15);">
+                        <strong style="font-size: 0.78rem; color: #FCA5A5; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
+                            <span>🚫 Resto de Internet Restringido</span>
+                        </strong>
+                        <p style="font-size: 0.78rem; color: var(--color-texto-suave); margin: 4px 0 0; line-height: 1.4;">
+                            Cualquier otro sitio no presente en la lista blanca anterior es rechazado automáticamente por las reglas de seguridad del firewall.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tarjeta: Materiales y Archivos del Laboratorio con Previsualizador -->
+            <div class="portal-subcard" style="margin-top: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+                    <h3 style="margin: 0;">📁 Materiales y Archivos de la Sesión</h3>
+                    <span id="contador-archivos-portal" class="badge" style="background: rgba(0, 229, 255, 0.1); color: #00E5FF; border: 1px solid rgba(0, 229, 255, 0.3);">
+                        0 recursos disponibles
+                    </span>
+                </div>
+                <p style="color: var(--color-texto-suave); font-size: 0.88rem; line-height: 1.5; margin: 0 0 16px;">
+                    Previsualiza guías prácticas, fotos o documentos directamente en pantalla, o descárgalos localmente a alta velocidad desde la red del aula:
+                </p>
+                <div id="lista-archivos-portal" style="display: flex; flex-direction: column; gap: 10px;">
+                    <span style="color: var(--color-texto-suave); font-size: 0.85rem;">Cargando archivos del laboratorio...</span>
+                </div>
+            </div>
+
+            <!-- Tarjeta: Sala de Chat y Trabajo Colaborativo (Estilo Discord / Telegram) -->
+            <div class="portal-subcard" style="margin-top: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span style="font-size: 1.5rem;">💬</span>
+                        <div>
+                            <h3 style="margin: 0; font-size: 1.15rem;">Sala de Chat y Trabajo Colaborativo</h3>
+                            <span id="chat-subtitulo-modo" style="font-size: 0.8rem; color: var(--color-texto-suave);">
+                                Conectando con tu equipo de trabajo...
+                            </span>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span id="badge-chat-mi-rol" class="badge" style="background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3);">
+                            Integrante
+                        </span>
+                        <span id="badge-chat-estado" class="badge badge-online">
+                            🟢 En Vivo
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Interfaz del Chat Estilo Discord / Telegram -->
+                <div class="discord-chat-container">
+                    <!-- Barra Lateral de Canales y Contactos -->
+                    <div class="discord-sidebar">
+                        <div class="discord-sidebar-section">
+                            <span class="discord-section-title">CANALES DE EQUIPO</span>
+                            <div id="lista-chat-canales" class="discord-channel-list">
+                                <!-- Canales inyectados dinámicamente -->
+                            </div>
+                        </div>
+
+                        <div class="discord-sidebar-section" style="margin-top: 14px;">
+                            <span class="discord-section-title">INTEGRANTES DISPONIBLES</span>
+                            <div id="lista-chat-contactos" class="discord-channel-list">
+                                <!-- Contactos inyectados dinámicamente -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Panel Principal de Mensajes -->
+                    <div class="discord-main-chat">
+                        <!-- Cabecera del Chat Activo -->
+                        <div class="discord-chat-header">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <span id="chat-icono-activo" style="font-size: 1.2rem;">📢</span>
+                                <div>
+                                    <h4 id="chat-titulo-activo" style="margin: 0; font-size: 0.95rem; font-weight: 700;">Canal de Equipo</h4>
+                                    <span id="chat-desc-activo" style="font-size: 0.76rem; color: var(--color-texto-suave);">Conversación grupal</span>
+                                </div>
+                            </div>
+                            <button type="button" id="btn-refrescar-chat" class="btn btn-secondary" style="padding: 4px 10px; font-size: 0.75rem;" title="Actualizar mensajes">
+                                🔄 Refrescar
+                            </button>
+                        </div>
+
+                        <!-- Historial de Mensajes -->
+                        <div id="chat-historial-mensajes" class="discord-messages-body">
+                            <div style="text-align: center; padding: 40px 10px; color: var(--color-texto-suave);">
+                                <div class="spinner" style="margin: 0 auto 10px;"></div>
+                                <p>Cargando mensajes del canal...</p>
+                            </div>
+                        </div>
+
+                        <!-- Barra de Envío de Mensaje -->
+                        <form id="form-enviar-chat" class="discord-input-bar">
+                            <input type="file" id="input-chat-archivo-adjunto" style="display: none;" />
+                            
+                            <button type="button" id="btn-adjuntar-archivo-chat" class="discord-btn-attach" title="Solo el líder puede compartir archivos con el grupo">
+                                📎
+                            </button>
+
+                            <div id="badge-adjunto-preview" class="discord-attachment-preview" style="display: none;">
+                                <span id="txt-nombre-adjunto-preview">archivo.pdf</span>
+                                <button type="button" id="btn-remover-adjunto" title="Quitar archivo">&times;</button>
+                            </div>
+
+                            <input type="text" id="input-chat-texto" class="discord-input-text" placeholder="Escribe un mensaje para tu equipo..." autocomplete="off" />
+
+                            <button type="submit" id="btn-enviar-mensaje-chat" class="btn btn-primary discord-btn-send">
+                                🚀 Enviar
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- VISTA 3: Sesión Expirada o Rechazada -->
+        <section id="vista-expirada" class="portal-expired-card" style="display: none;">
+            <div class="expired-icon-container">
+                🛑
+            </div>
+            <h2 style="font-size: 1.6rem; margin: 0 0 10px; color: #F87171; font-weight: 800;">
+                Tiempo de Conexión Finalizado
+            </h2>
+            <p id="mensaje-expirado" style="color: var(--color-texto-suave); font-size: 1rem; margin: 0 0 20px; line-height: 1.5;">
+                Tu tiempo de sesión asignado ha culminado y la salida a internet ha sido pausada por el router.
+            </p>
+
+            <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 10px; padding: 16px 20px; max-width: 480px; margin: 0 auto 20px; font-size: 0.9rem; color: #FCA5A5;">
+                💡 <strong>¿Necesitas más tiempo?</strong> Solicita minutos adicionales al docente o administrador a cargo para continuar con tu práctica.
+            </div>
+
+            <div style="margin: 24px 0 20px;">
+                <button id="btn-solicitar-reacceso" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 8px; font-size: 1rem; padding: 14px 28px; cursor: pointer; border-radius: 10px; box-shadow: 0 6px 20px rgba(124, 58, 237, 0.35);">
+                    ✋ Solicitar Acceso / Nueva Sesión
+                </button>
+            </div>
+
+            <div style="display: flex; justify-content: center; gap: 16px; font-size: 0.85rem; color: var(--color-texto-suave);">
+                <span>🖥️ <strong id="expirado-equipo">—</strong></span>
+                <span>🌐 <strong id="expirado-ip">—</strong></span>
+            </div>
+        </section>
+    </main>
+
+    <!-- MODAL VISOR INTERACTIVO DE ARCHIVOS (IMÁGENES, PDFS, CÓDIGO) -->
+    <div id="modal-visor-archivo" class="modal-visor-backdrop">
+        <div class="modal-visor-card">
+            <div class="visor-header">
+                <div class="visor-title-wrap">
+                    <span id="visor-icono" class="visor-icon">📄</span>
+                    <div>
+                        <h3 id="visor-nombre" class="visor-filename">nombre_archivo</h3>
+                        <span id="visor-meta" class="visor-meta">0 KB • Recurso</span>
+                    </div>
+                </div>
+                <button id="btn-cerrar-visor" type="button" class="visor-close-btn" title="Cerrar">&times;</button>
+            </div>
+            <div id="visor-body" class="visor-body">
+                <!-- Se inyecta la imagen, iframe o bloque de texto -->
+            </div>
+            <div class="visor-footer">
+                <span id="visor-info-footer" style="font-size: 0.82rem; color: var(--text-muted);">Visualizador seguro de recursos de NetworkLab</span>
+                <div style="display: flex; gap: 10px;">
+                    <a id="visor-btn-descargar" href="#" class="btn" style="background: linear-gradient(135deg, #0284C7, #00E5FF); color: #0B0F19; font-weight: 700; padding: 8px 18px; border-radius: 8px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+                        ⬇️ Descargar
+                    </a>
+                    <button id="btn-cerrar-visor-2" type="button" class="btn" style="background: rgba(255,255,255,0.08); color: #f1f5f9; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); cursor: pointer;">
+                        Cerrar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL EMERGENTE DE BIENVENIDA / HANDOFF CHROME AL SER APROBADO -->
+    <div id="modal-aprobado-chrome" class="modal-visor-backdrop" style="z-index: 10001;">
+        <div class="modal-visor-card" style="max-width: 520px; text-align: center; padding: 26px 20px;">
+            <div style="font-size: 3.2rem; margin-bottom: 8px;">🎉</div>
+            <h2 style="font-size: 1.5rem; color: #4ade80; margin: 0 0 10px; font-weight: 800;">¡Conexión Autorizada con Éxito!</h2>
+            <p style="font-size: 0.92rem; color: #cbd5e1; line-height: 1.55; margin: 0 0 20px;">
+                El docente ha habilitado tu acceso a internet. Para no perder el acceso a los comunicados de clase y materiales compartidos cuando esta mini-ventana se cierre, abre el portal en tu navegador:
+            </p>
+            <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px;">
+                <a id="btn-aprobado-chrome-intent" href="#" class="btn-chrome-intent" style="padding: 14px 22px; font-size: 1.05rem;">
+                    🚀 Abrir en Google Chrome
+                </a>
+                <button type="button" id="btn-aprobado-continuar" class="btn" style="background: rgba(255,255,255,0.06); color: #94a3b8; border: 1px solid rgba(255,255,255,0.12); padding: 10px; border-radius: 10px; cursor: pointer;">
+                    Continuar en esta ventana
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <span>NetworkLab • Plataforma de Administración de Red</span>
+    </footer>
+
+    <canvas id="network-canvas" aria-hidden="true"></canvas>
+
+    <script src="js/pdf.min.js"></script>
+    <script src="js/portal.js?v=7.1"></script>
+    <script>
+    (function() {
+        const canvas = document.getElementById('network-canvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        let W, H, nodes = [], animFrame;
+        const COLORS = ['rgba(139,92,246,','rgba(236,72,153,','rgba(251,146,60,','rgba(0,217,255,'];
+        const N = 35, DIST = 140, SPD = 0.2;
+        function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+        function mk() { const c=COLORS[Math.floor(Math.random()*COLORS.length)]; return {x:Math.random()*W,y:Math.random()*H,vx:(Math.random()-.5)*SPD,vy:(Math.random()-.5)*SPD,r:1.5+Math.random()*1.5,color:c,p:Math.random()*Math.PI*2,ps:.015+Math.random()*.015}; }
+        function init() { resize(); nodes = Array.from({length:N},mk); }
+        function draw() {
+            ctx.clearRect(0,0,W,H);
+            for(let i=0;i<nodes.length;i++){for(let j=i+1;j<nodes.length;j++){const dx=nodes[i].x-nodes[j].x,dy=nodes[i].y-nodes[j].y,d=Math.sqrt(dx*dx+dy*dy);if(d<DIST){ctx.beginPath();ctx.moveTo(nodes[i].x,nodes[i].y);ctx.lineTo(nodes[j].x,nodes[j].y);ctx.strokeStyle=nodes[i].color+(1-d/DIST)*.3+')';ctx.lineWidth=.7;ctx.stroke();}}}
+            nodes.forEach(n=>{n.p+=n.ps;const a=.4+.5*Math.sin(n.p);ctx.beginPath();ctx.arc(n.x,n.y,n.r*(1+.3*Math.sin(n.p)),0,Math.PI*2);ctx.fillStyle=n.color+a+')';ctx.fill();n.x+=n.vx;n.y+=n.vy;if(n.x<-10||n.x>W+10)n.vx*=-1;if(n.y<-10||n.y>H+10)n.vy*=-1;});
+            animFrame = requestAnimationFrame(draw);
+        }
+        init(); draw();
+        window.addEventListener('resize',()=>resize());
+        document.addEventListener('visibilitychange',()=>{if(document.hidden)cancelAnimationFrame(animFrame);else draw();});
+    })();
+    </script>
+</body>
+
+</html>
