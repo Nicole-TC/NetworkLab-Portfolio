@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F172A"/>
+      <stop offset="100%" stop-color="#050B14"/>
+    </linearGradient>
+    <linearGradient id="cyberGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00E5FF"/>
+      <stop offset="50%" stop-color="#3B82F6"/>
+      <stop offset="100%" stop-color="#8B5CF6"/>
+    </linearGradient>
+    <linearGradient id="coreGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8"/>
+      <stop offset="100%" stop-color="#00E5FF"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="1.8" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+
+  <!-- Fondo squircle premium oscuro -->
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#bgGrad)" stroke="#1E293B" stroke-width="2"/>
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="none" stroke="url(#cyberGrad)" stroke-width="1.5" stroke-opacity="0.45"/>
+
+  <!-- Hexágono de red exterior -->
+  <polygon points="32,11 49,20 49,42 32,51 15,42 15,20" 
+           fill="none" 
+           stroke="url(#cyberGrad)" 
+           stroke-width="2.6" 
+           stroke-linejoin="round" 
+           filter="url(#glow)"/>
+
+  <!-- Líneas de interconexión con el núcleo central -->
+  <line x1="32" y1="11" x2="32" y2="31" stroke="#00E5FF" stroke-width="2.2" stroke-linecap="round" opacity="0.85"/>
+  <line x1="15" y1="42" x2="32" y2="31" stroke="#3B82F6" stroke-width="2.2" stroke-linecap="round" opacity="0.85"/>
+  <line x1="49" y1="42" x2="32" y2="31" stroke="#8B5CF6" stroke-width="2.2" stroke-linecap="round" opacity="0.85"/>
+
+  <!-- Nodos periféricos -->
+  <circle cx="32" cy="11" r="3" fill="#00E5FF"/>
+  <circle cx="49" cy="20" r="2.5" fill="#38BDF8"/>
+  <circle cx="49" cy="42" r="2.8" fill="#8B5CF6"/>
+  <circle cx="32" cy="51" r="2.8" fill="#6366F1"/>
+  <circle cx="15" cy="42" r="2.8" fill="#00E5FF"/>
+  <circle cx="15" cy="20" r="2.5" fill="#38BDF8"/>
+
+  <!-- Núcleo central pulsante (NetworkLab Hub) -->
+  <circle cx="32" cy="31" r="5.5" fill="url(#coreGrad)" filter="url(#glow)"/>
+  <circle cx="32" cy="31" r="2.4" fill="#FFFFFF"/>
+</svg>

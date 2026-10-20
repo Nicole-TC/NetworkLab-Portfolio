@@ -1,0 +1,1554 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NetworkLab — Panel de Administración</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="alternate icon" href="favicon.ico" />
+    <link rel="apple-touch-icon" href="favicon.png" />
+    <link rel="stylesheet" href="css/style.css?v=7.0" />
+    <!-- Chart.js local para funcionamiento 100% offline sin depender de internet -->
+    <script src="js/chart.js"></script>
+</head>
+
+<body>
+<div id="page-loader" class="page-loader">
+    <div class="loader-brand">🛡️ NetworkLab</div>
+    <div class="loader-dots">
+      <span></span><span></span><span></span><span></span>
+    </div>
+    <div class="loader-bar-wrap"><div class="loader-bar"></div></div>
+    <div class="loader-text">Iniciando sistema de red...</div>
+</div>
+<script>
+  window.addEventListener("load", function() {
+    setTimeout(function() {
+      var l = document.getElementById("page-loader");
+      if (l) { l.classList.add("hidden"); setTimeout(function(){ l.remove(); }, 600); }
+    }, 800);
+  });
+</script>
+    <!-- Encabezado con Menú Desplegable de Usuario y Opciones del Sistema -->
+    <header class="app-header">
+        <div class="header-left">
+            <h1 class="header-brand">🛡️ NetworkLab</h1>
+            <span class="subtitle">Consola de Red</span>
+        </div>
+        <div class="header-right">
+            <!-- Estado de MikroTik -->
+            <div id="mikrotik-status-badge" class="mikrotik-status-badge mikrotik-connecting" title="Comprobando enlace con el router MikroTik...">
+                <span class="mikrotik-status-dot"></span>
+                <span class="mikrotik-status-text" id="mikrotik-status-text">MikroTik: Verificando...</span>
+            </div>
+
+            <!-- Menú Desplegable de Usuario / Opciones (Modo Claro/Oscuro, Documentación, Logout) -->
+            <div class="user-menu-dropdown-wrap" id="user-menu-wrap">
+                <button id="btn-user-dropdown-toggle" class="btn-user-dropdown-toggle" type="button" aria-haspopup="true" aria-expanded="false" title="Menú de cuenta y configuración">
+                    <span class="user-avatar-icon">👤</span>
+                    <span class="user-name-text" id="admin-user-display">admin</span>
+                    <span class="user-role-badge role-admin">ADMIN</span>
+                    <span class="user-dropdown-arrow">▾</span>
+                </button>
+                <div class="user-dropdown-panel" id="user-dropdown-panel">
+                    <div class="user-dropdown-header">
+                        <span class="udh-name">Administrador del Laboratorio</span>
+                        <span class="udh-role">Superusuario · Control Total</span>
+                    </div>
+                    <div class="user-dropdown-divider"></div>
+                    <!-- Botón Modo Claro / Oscuro -->
+                    <button id="btn-toggle-theme" type="button" class="user-dropdown-item" title="Cambiar a Modo Claro / Oscuro">
+                        <span class="ud-icon" id="theme-toggle-icon">☀️</span>
+                        <span class="ud-label" id="theme-toggle-text">Modo Claro</span>
+                    </button>
+                    <!-- Botón Documentación -->
+                    <a href="doc.html" target="_blank" class="user-dropdown-item" title="Ver Documentación Técnica">
+                        <span class="ud-icon">📖</span>
+                        <span class="ud-label">Documentación Técnica</span>
+                    </a>
+                    <div class="user-dropdown-divider"></div>
+                    <!-- Botón Cerrar Sesión -->
+                    <button id="btn-logout" type="button" class="user-dropdown-item logout-item" title="Cerrar sesión">
+                        <span class="ud-icon">🚪</span>
+                        <span class="ud-label">Cerrar sesión</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Barra de Navegación Compacta con Menú Hamburguesa de Módulos -->
+    <div class="modules-compact-bar">
+        <!-- Menú Hamburguesa / Dropdown de Módulos -->
+        <div class="modules-menu-wrap" id="modules-menu-wrap">
+            <button id="btn-modules-toggle" class="btn-modules-toggle" type="button" aria-haspopup="true" aria-expanded="false" title="Abrir catálogo de módulos del laboratorio">
+                <span class="hamburger-icon">
+                    <span></span><span></span><span></span>
+                </span>
+                <span class="btn-modules-title">Módulos</span>
+                <span class="modules-count-badge">9</span>
+                <span class="modules-arrow">▾</span>
+            </button>
+
+            <!-- Menú Desplegable con los 9 Módulos en Lista Organizada -->
+            <div class="modules-dropdown-panel" id="modules-dropdown-panel">
+                <div class="modules-panel-header">
+                    <span>Módulos del Sistema</span>
+                    <button type="button" id="btn-close-modules-menu" class="btn-close-modules" title="Cerrar menú">✕</button>
+                </div>
+                <nav class="modules-grid-list" id="main-tabs-nav" aria-label="Navegación de módulos">
+                    <button class="tab-btn active" data-tab="tab-control" title="Monitor de dispositivos y control de sesiones">
+                        <span class="tab-icon-badge">🖥️</span>
+                        <div class="module-btn-info">
+                            <span class="tab-label">Dispositivos y Sesiones</span>
+                            <small class="tab-desc">Monitor en vivo, bloqueo y leases DHCP</small>
+                        </div>
+                    </button>
+                    <button class="tab-btn" data-tab="tab-filtrado" title="Políticas de filtrado web y lista blanca de dominios">
+                        <span class="tab-icon-badge">🛡️</span>
+                        <div class="module-btn-info">
+                            <span class="tab-label">Filtrado Web</span>
+                            <small class="tab-desc">Políticas L7, listas blancas y bloqueos</small>
+                        </div>
+                    </button>
+                    <button class="tab-btn" data-tab="tab-estadisticas" title="Estadísticas de consumo y métricas de red">
+                        <span class="tab-icon-badge">📊</span>
+                        <div class="module-btn-info">
+                            <span class="tab-label">Estadísticas y Gráficos</span>
+                            <small class="tab-desc">Telemetría de ancho de banda y tráfico</small>
+                        </div>
+                    </button>
+                    <button class="tab-btn" data-tab="tab-actividad" id="btn-tab-actividad" title="Historial y consumo de aplicaciones en vivo">
+                        <span class="tab-icon-badge">🎮</span>
+                        <div class="module-btn-info">
+                            <span class="tab-label">Historial de Actividad</span>
+                            <small class="tab-desc">Conntrack y aplicaciones detectadas</small>
+                        </div>
+                    </button>
+                    <button class="tab-btn" data-tab="tab-grupos" id="btn-tab-grupos" title="Mesas de trabajo y aislamiento de red">
+                        <span class="tab-icon-badge">👥</span>
+                        <div class="module-btn-info">
+                            <span class="tab-label">Grupos y Aislamiento</span>
+                            <small class="tab-desc">Mesas virtuales y mapa de red interactivo</small>
+                        </div>
+                    </button>
+                    <button class="tab-btn" data-tab="tab-archivos" title="Distribución de archivos y guías de trabajo">
+                        <span class="tab-icon-badge">📁</span>
+                        <div class="module-btn-info">
+                            <span class="tab-label">Gestión de Archivos</span>
+                            <small class="tab-desc">Compartir PDFs, guías y recursos de clase</small>
+                        </div>
+                    </button>
+                    <button class="tab-btn" data-tab="tab-mensajes" title="Canales de mensajería y avisos del laboratorio">
+                        <span class="tab-icon-badge">💬</span>
+                        <div class="module-btn-info">
+                            <span class="tab-label">Mensajería</span>
+                            <small class="tab-desc">Chat directo, broadcast y bandeja admin</small>
+                        </div>
+                    </button>
+                    <button class="tab-btn" data-tab="tab-usuarios" title="Administración de cuentas y usuarios">
+                        <span class="tab-icon-badge">👤</span>
+                        <div class="module-btn-info">
+                            <span class="tab-label">Gestión de Usuarios</span>
+                            <small class="tab-desc">Cuentas, contraseñas y roles de acceso</small>
+                        </div>
+                    </button>
+                    <button class="tab-btn" data-tab="tab-roles" title="Políticas de sesión y permisos por rol">
+                        <span class="tab-icon-badge">⚙️</span>
+                        <div class="module-btn-info">
+                            <span class="tab-label">Permisos y Roles</span>
+                            <small class="tab-desc">Límites de tiempo y permisos granulares</small>
+                        </div>
+                    </button>
+                </nav>
+            </div>
+        </div>
+
+        <!-- Indicador destacado del Módulo Activo en la barra -->
+        <div class="current-module-display">
+            <span class="cmd-icon" id="current-module-icon">🖥️</span>
+            <div class="cmd-text">
+                <span class="cmd-tag">Módulo Actual</span>
+                <span class="cmd-title" id="current-module-title">Dispositivos y Sesiones</span>
+            </div>
+        </div>
+
+        <!-- Selector desplegable compacto y accesible -->
+        <div class="quick-select-compact-wrap">
+            <select id="select-tab-nav" class="compact-tab-select" aria-label="Cambiar módulo rápidamente">
+                <option value="tab-control">🖥️ Dispositivos y Sesiones</option>
+                <option value="tab-filtrado">🛡️ Filtrado Web</option>
+                <option value="tab-estadisticas">📊 Estadísticas y Gráficos</option>
+                <option value="tab-actividad">🎮 Historial de Actividad</option>
+                <option value="tab-grupos">👥 Grupos y Aislamiento</option>
+                <option value="tab-archivos">📁 Archivos</option>
+                <option value="tab-mensajes">💬 Mensajería</option>
+                <option value="tab-usuarios">👤 Gestión de Usuarios</option>
+                <option value="tab-roles">⚙️ Permisos y Roles</option>
+            </select>
+        </div>
+    </div>
+
+    <main>
+        <!-- PESTAÑA 1: Dispositivos y Sesiones -->
+        <div id="tab-control" class="tab-content active">
+            <!-- Panel: Dispositivos -->
+            <section class="panel">
+                <div class="panel-header">
+                    <h2>Dispositivos en Red</h2>
+                    <div class="panel-actions">
+                        <label class="label-tiempo-default">
+                            <span>Tiempo def:</span>
+                            <input type="number" id="input-tiempo-default" min="1" placeholder="Ilimitado (min)" class="input-tiempo input-tiempo-compact" />
+                        </label>
+                        <label class="label-tiempo-default">
+                            <span>Velocidad def:</span>
+                            <select id="select-velocidad-default" class="select-velocidad">
+                                <option value="">Ilimitada</option>
+                                <option value="2">2 Mbps</option>
+                                <option value="5">5 Mbps</option>
+                                <option value="10">10 Mbps</option>
+                                <option value="20">20 Mbps</option>
+                            </select>
+                        </label>
+                        <button id="btn-sync-devices" class="btn btn-primary">
+                            <span class="btn-icon">🔄</span> Sincronizar dispositivos
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Sub-pestañas de Filtrado de Dispositivos -->
+                <div class="subtabs-bar">
+                    <button class="subtab-btn active" data-subtab="online" id="btn-subtab-online">
+                        🟢 Conectados Ahora <span class="subtab-counter" id="badge-count-online">0</span>
+                    </button>
+                    <button class="subtab-btn" data-subtab="pending" id="btn-subtab-pending">
+                        ⏳ Pendientes <span class="subtab-counter" id="badge-count-pending">0</span>
+                    </button>
+                    <button class="subtab-btn" data-subtab="all" id="btn-subtab-all">
+                        🖥️ Todos los Registrados <span class="subtab-counter" id="badge-count-all">0</span>
+                    </button>
+                    <button class="subtab-btn" data-subtab="history" id="btn-subtab-history">
+                        📜 Historial de Sesiones
+                    </button>
+                    <button id="btn-purge-offline" class="btn btn-logout" style="margin-left: auto; padding: 6px 14px; font-size: 0.78rem; border-radius: var(--radius-sm);" title="Elimina de la base de datos los equipos que ya no están conectados">
+                        🧹 Limpiar Inactivos
+                    </button>
+                </div>
+
+                <!-- Tabla Principal de Dispositivos -->
+                <div class="table-responsive" id="contenedor-dispositivos">
+                    <table id="tabla-dispositivos">
+                        <thead>
+                            <tr>
+                                <th>Presencia / Estado</th>
+                                <th>Nombre</th>
+                                <th>IP</th>
+                                <th>MAC</th>
+                                <th>Última Actividad</th>
+                                <th>Tiempo / Velocidad / Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Se completa dinámicamente -->
+                        </tbody>
+                    </table>
+                </div>
+                <p id="mensaje-dispositivos" class="mensaje-vacio"></p>
+
+                <!-- Tabla de Historial de Sesiones (visible al hacer clic en Historial) -->
+                <div class="table-responsive" id="contenedor-historial" style="display: none;">
+                    <table id="tabla-historial-sesiones">
+                        <thead>
+                            <tr>
+                                <th>Equipo</th>
+                                <th>IP</th>
+                                <th>Inicio</th>
+                                <th>Fin</th>
+                                <th>Duración Total</th>
+                                <th>Límite QoS</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Se completa dinámicamente -->
+                        </tbody>
+                    </table>
+                </div>
+                <p id="mensaje-historial" class="mensaje-vacio"></p>
+            </section>
+
+            <!-- Panel: Sesiones Activas -->
+            <section class="panel">
+                <div class="panel-header">
+                    <h2>Sesiones Activas (Conectados Ahora)</h2>
+                    <button id="btn-sync-sessions" class="btn btn-primary">
+                        Sincronizar sesiones
+                    </button>
+                </div>
+                <div class="table-responsive">
+                    <table id="tabla-sesiones">
+                        <thead>
+                            <tr>
+                                <th>Dispositivo</th>
+                                <th>IP</th>
+                                <th>Conectado Desde</th>
+                                <th>Tiempo Restante</th>
+                                <th>Velocidad (QoS)</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Se completa dinámicamente -->
+                        </tbody>
+                    </table>
+                </div>
+                <p id="mensaje-sesiones" class="mensaje-vacio"></p>
+            </section>
+        </div>
+
+        <!-- PESTAÑA 2: Filtrado Web (Modo Lista Blanca) -->
+        <div id="tab-filtrado" class="tab-content">
+            <section class="panel">
+                <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                    <div>
+                        <h2>🛡️ Filtrado Web: Modo Lista Blanca (Solo Sitios Permitidos)</h2>
+                        <p style="font-size: 0.85rem; color: var(--color-texto-suave); margin: 4px 0 0;">
+                            Los alumnos solo pueden acceder a los sitios web autorizados en esta lista. Todo el resto de internet está bloqueado por defecto.
+                        </p>
+                    </div>
+                    <span class="badge badge-whitelist-status" style="padding: 6px 14px; font-weight: 700; border-radius: 8px;">
+                        🛡️ MODO LISTA BLANCA ACTIVO
+                    </span>
+                </div>
+                <div class="filtro-formulario">
+                    <div class="filtro-input-group">
+                        <input 
+                            type="text" 
+                            id="input-dominio-bloquear" 
+                            placeholder="Escribe el dominio permitido (ej: wikipedia.org, google.com, classroom.google.com)" 
+                            class="input-dominio"
+                        />
+                        <select id="select-categoria-bloquear" class="select-categoria">
+                            <option value="Educación / Estudio">Educación / Estudio</option>
+                            <option value="Buscadores">Buscadores</option>
+                            <option value="Herramientas">Herramientas</option>
+                            <option value="Institucional">Institucional</option>
+                            <option value="Documentación">Documentación</option>
+                            <option value="General">General</option>
+                        </select>
+                        <select id="select-alcance-bloquear" class="select-categoria" style="min-width: 175px;">
+                            <option value="todos">🌐 Toda la red de alumnos (Admin y Nivel 2 exentos)</option>
+                            <option value="rol_nivel_1">👥 Solo Nivel 1 (Estándar / Alumnos)</option>
+                            <option value="rol_nivel_2">👥 Solo Nivel 2 (Supervisión / Encargados)</option>
+                            <option value="solo_seleccionados">🎯 Solo PCs seleccionadas...</option>
+                            <option value="todos_excepto">🛡️ Toda la red excepto...</option>
+                        </select>
+                        <button id="btn-bloquear-dominio" class="btn btn-primary btn-permitir-dominio">
+                            ➕ Permitir Dominio
+                        </button>
+                    </div>
+
+                    <!-- Selector dinámico de computadoras para alcance específico -->
+                    <div id="contenedor-seleccion-pcs" style="display: none; margin-top: 10px; margin-bottom: 12px; padding: 14px 16px; background: rgba(0, 240, 255, 0.04); border: 1px dashed rgba(0, 240, 255, 0.3); border-radius: 10px;">
+                        <span id="label-seleccion-pcs" style="font-size: 0.85rem; font-weight: 600; color: #00F0FF; display: block; margin-bottom: 8px;">
+                            Selecciona las computadoras afectadas:
+                        </span>
+                        <div id="lista-checkboxes-pcs" style="display: flex; flex-wrap: wrap; gap: 10px;">
+                            <!-- Checkboxes generados dinámicamente -->
+                        </div>
+                    </div>
+
+                    <div class="botones-rapidos-container">
+                        <span class="label-rapido">Sitios educativos sugeridos:</span>
+                        <button class="btn btn-quick-block" data-domain="google.com" data-cat="Buscadores">+ Google</button>
+                        <button class="btn btn-quick-block" data-domain="wikipedia.org" data-cat="Educación / Estudio">+ Wikipedia</button>
+                        <button class="btn btn-quick-block" data-domain="classroom.google.com" data-cat="Educación / Estudio">+ Classroom</button>
+                        <button class="btn btn-quick-block" data-domain="youtube.com" data-cat="Educación / Estudio">+ YouTube</button>
+                        <button class="btn btn-quick-block" data-domain="khanacademy.org" data-cat="Educación / Estudio">+ Khan Academy</button>
+                        <button class="btn btn-quick-block" data-domain="github.com" data-cat="Herramientas">+ GitHub</button>
+                        <button class="btn btn-quick-block" data-domain="python.org" data-cat="Educación / Estudio">+ Python.org</button>
+                        <button class="btn btn-quick-block" data-domain="stackoverflow.com" data-cat="Herramientas">+ Stack Overflow</button>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table id="tabla-dominios">
+                        <thead>
+                            <tr>
+                                <th>Dominio Autorizado (Lista Blanca)</th>
+                                <th>Categoría</th>
+                                <th>Alcance de Navegación</th>
+                                <th>Fecha de Alta</th>
+                                <th>Estado en MikroTik</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Se completa dinámicamente -->
+                        </tbody>
+                    </table>
+                </div>
+                <p id="mensaje-dominios" class="mensaje-vacio"></p>
+            </section>
+        </div>
+
+        <!-- PESTAÑA 3: Estadísticas y Gráficos -->
+        <div id="tab-estadisticas" class="tab-content">
+            <section class="panel">
+                <div class="panel-header">
+                    <h2>📊 Métricas Generales</h2>
+                    <button id="btn-refrescar-stats" class="btn btn-primary">
+                        Refrescar Estadísticas
+                    </button>
+                </div>
+
+                <!-- Tarjetas KPI -->
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-icon">🖥️</div>
+                        <div class="kpi-info">
+                            <h3>Dispositivos</h3>
+                            <div id="kpi-dispositivos" class="kpi-valor">0</div>
+                            <small id="kpi-dispositivos-sub" style="color: var(--color-texto-suave)">0 aprobados</small>
+                        </div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-icon">⚡</div>
+                        <div class="kpi-info">
+                            <h3>Sesiones Activas</h3>
+                            <div id="kpi-sesiones-activas" class="kpi-valor">0</div>
+                            <small id="kpi-sesiones-sub" style="color: var(--color-texto-suave)">0 totales</small>
+                        </div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-icon">⏳</div>
+                        <div class="kpi-info">
+                            <h3>Tiempo Activo Real</h3>
+                            <div id="kpi-horas" class="kpi-valor">0h</div>
+                            <small id="kpi-horas-sub" style="color: var(--color-texto-suave)">Navegación efectiva (sin tiempo muerto)</small>
+                        </div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-icon">🛡️</div>
+                        <div class="kpi-info">
+                            <h3>Sitios en Lista Blanca</h3>
+                            <div id="kpi-dominios" class="kpi-valor">0</div>
+                            <small style="color: var(--color-texto-suave)">Autorizados en MikroTik</small>
+                        </div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-icon">🌐</div>
+                        <div class="kpi-info">
+                            <h3>Tiempo Activo MikroTik</h3>
+                            <div id="kpi-mikrotik-uptime" class="kpi-valor" style="color: #00E5FF; font-family: var(--font-mono); font-size: 1.45rem;">--</div>
+                            <small id="kpi-mikrotik-sub" style="color: var(--color-texto-suave)">Uptime RouterOS (RB750Gr3)</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Gráficos Interactivos -->
+                <div class="charts-grid">
+                    <div class="chart-card">
+                        <div class="chart-header-actions">
+                            <h3 style="margin: 0;">📈 Tiempo por Computadora</h3>
+                            <div class="chart-toggle-group">
+                                <button type="button" class="btn-chart-mode active" id="btn-chart-solo-activo">✨ Solo Activo Real</button>
+                                <button type="button" class="btn-chart-mode" id="btn-chart-comparativo">📊 Comparativo (Activo vs Muerto)</button>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="chart-consumo"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="chart-card">
+                        <h3>🎯 Distribución de Dominios en Lista Blanca por Categoría</h3>
+                        <div class="chart-container">
+                            <canvas id="chart-categorias"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Desglose Individual de Actividad y Consumo por Dispositivo -->
+                <div class="panel-section" style="margin-top: 32px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+                        <div>
+                            <h3 style="margin: 0; font-size: 1.15rem; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+                                <span>🖥️ Desglose Individual de Actividad por Dispositivo</span>
+                                <span id="contador-dispositivos-stats" class="badge" style="background: rgba(0, 229, 255, 0.1); color: #00E5FF; border: 1px solid rgba(0, 229, 255, 0.3); font-size: 0.72rem;">0 equipos</span>
+                            </h3>
+                            <p style="margin: 4px 0 0; color: var(--color-texto-suave); font-size: 0.85rem;">
+                                Información detallada equipo por equipo: tiempo productivo activo, tiempo inactivo descartado y porcentaje de trabajo.
+                            </p>
+                        </div>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <input type="text" id="filtro-stats-dispositivo" class="input-texto" placeholder="🔍 Filtrar por nombre, IP o MAC..." style="width: 250px; font-size: 0.82rem; padding: 7px 12px;" />
+                        </div>
+                    </div>
+
+                    <!-- Cuadrícula de Tarjetas Individuales por Equipo -->
+                    <div id="grid-stats-dispositivos" class="device-stats-grid">
+                        <div style="grid-column: 1 / -1; text-align: center; color: var(--color-texto-suave); padding: 24px;">
+                            Cargando estadísticas de equipos...
+                        </div>
+                    </div>
+
+                    <!-- Tabla Resumen Individual Detallada -->
+                    <div class="tabla-contenedor" style="margin-top: 20px;">
+                        <table class="tabla" id="tabla-stats-individual">
+                            <thead>
+                                <tr>
+                                    <th>Dispositivo / Equipo</th>
+                                    <th>Dirección IP / MAC</th>
+                                    <th>Rol Asignado</th>
+                                    <th>Estado de Red</th>
+                                    <th>🟢 Tiempo Activo Hoy</th>
+                                    <th>📚 Acumulado Histórico</th>
+                                    <th>💤 Pausas Hoy</th>
+                                    <th>Efectividad Hoy</th>
+                                    <th>Límite QoS</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-stats-individual">
+                                <tr>
+                                    <td colspan="9" style="text-align: center; color: var(--color-texto-suave); padding: 20px;">
+                                        Cargando detalle de consumo...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- PESTAÑA: Historial de Actividad y Monitoreo de Aplicaciones -->
+        <div id="tab-actividad" class="tab-content">
+            <section class="panel">
+                <div class="panel-header">
+                    <div>
+                        <h2>🎮 Monitoreo de Actividad y Aplicaciones en Vivo</h2>
+                        <p style="font-size: 0.85rem; color: var(--color-texto-suave); margin-top: 4px;">
+                            Inspección en tiempo real del uso de estaciones: juegos online (Dota 2, Steam), streaming de video, redes sociales y plataformas de estudio.
+                        </p>
+                    </div>
+                    <div class="panel-actions">
+                        <div class="search-box-activity">
+                            <input type="text" id="input-buscar-actividad" placeholder="🔍 Buscar por nombre o IP..." class="input-tiempo" style="width: 220px;" />
+                        </div>
+                        <button id="btn-refresh-actividad" class="btn btn-primary">
+                            <span class="btn-icon">🔄</span> Actualizar Actividad
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Resumen de Métricas de Actividad -->
+                <div class="activity-summary-kpis">
+                    <div class="activity-kpi-card">
+                        <span class="kpi-icon-circ" style="background: rgba(16, 185, 129, 0.15); color: #10b981;">💻</span>
+                        <div>
+                            <span class="activity-kpi-num" id="kpi-act-total-disp">0</span>
+                            <span class="activity-kpi-label">Equipos Aprobados</span>
+                        </div>
+                    </div>
+                    <div class="activity-kpi-card">
+                        <span class="kpi-icon-circ" style="background: rgba(236, 72, 153, 0.15); color: #ec4899;">🎮</span>
+                        <div>
+                            <span class="activity-kpi-num" id="kpi-act-en-juegos">0</span>
+                            <span class="activity-kpi-label">En Partida (Juegos)</span>
+                        </div>
+                    </div>
+                    <div class="activity-kpi-card">
+                        <span class="kpi-icon-circ" style="background: rgba(239, 68, 68, 0.15); color: #ef4444;">🎬</span>
+                        <div>
+                            <span class="activity-kpi-num" id="kpi-act-en-video">0</span>
+                            <span class="activity-kpi-label">Streaming / Video</span>
+                        </div>
+                    </div>
+                    <div class="activity-kpi-card">
+                        <span class="kpi-icon-circ" style="background: rgba(14, 165, 233, 0.15); color: #0ea5e9;">📚</span>
+                        <div>
+                            <span class="activity-kpi-num" id="kpi-act-en-estudio">0</span>
+                            <span class="activity-kpi-label">Estudio / Trabajo</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Grid de Tarjetas de Dispositivos con Iconos SVG -->
+                <div id="grid-dispositivos-actividad" class="activity-grid">
+                    <div class="activity-loading-placeholder">
+                        <div class="spinner"></div>
+                        <p>Cargando dispositivos e inspeccionando tráfico de red...</p>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- PESTAÑA: Mesas de Trabajo y Aislamiento de Grupos -->
+        <div id="tab-grupos" class="tab-content">
+            <section class="panel">
+                <div class="panel-header">
+                    <div>
+                        <h2>👥 Mesas de Trabajo y Aislamiento de Red</h2>
+                        <p style="font-size: 0.85rem; color: var(--color-texto-suave); margin-top: 4px;">
+                            Configura grupos aislados en la red. Cuando el aislamiento está activo, los puestos solo pueden comunicarse con los integrantes de su mesa.
+                        </p>
+                    </div>
+                    <div class="panel-actions" style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+                        <!-- Interruptor Global de Aislamiento -->
+                        <div class="isolation-toggle-wrapper">
+                            <span class="isolation-toggle-label">Modo Grupos Aislados:</span>
+                            <button type="button" id="btn-toggle-modo-aislamiento" class="btn-isolation-switch inactivo">
+                                <span class="isolation-switch-knob"></span>
+                                <span id="txt-modo-aislamiento" class="isolation-switch-text">DESACTIVADO (Red Abierta)</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- LIENZO INTERACTIVO DE RED (Canvas / Grafo de Nodos) -->
+                <div class="canvas-panel-card">
+                    <div class="canvas-header-toolbar">
+                        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                            <span style="font-weight: 700; font-size: 0.95rem; color: var(--color-texto);">🕸️ Mapa Visual de Estaciones Conectadas</span>
+                            <span class="badge" id="badge-canvas-seleccionados" style="background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3);">
+                                0 seleccionados
+                            </span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                            <button type="button" id="btn-crear-grupo-seleccion" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 6px;" disabled>
+                                ✨ Formar Grupo con Seleccionados
+                            </button>
+                            <button type="button" id="btn-limpiar-seleccion-canvas" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: 6px;" title="Deseleccionar todos los equipos marcados">
+                                🧹 Deseleccionar
+                            </button>
+                            <button type="button" id="btn-purga-offline-canvas" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: 6px;" title="Eliminar de la red y MikroTik los equipos que no estén conectados">
+                                ⚡ Limpiar Desconectados
+                            </button>
+                            <button type="button" id="btn-recargar-canvas-grupos" class="btn btn-secondary" title="Actualizar mapa">
+                                🔄
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Contenedor del Lienzo con Canvas -->
+                    <div class="canvas-viewport-wrapper" id="canvas-viewport-wrap">
+                        <canvas id="canvas-grafo-grupos" width="1000" height="460"></canvas>
+                        
+                        <!-- Controles flotantes de navegación (Pan & Zoom) -->
+                        <div class="canvas-nav-controls">
+                            <button type="button" id="btn-canvas-zoom-in" class="canvas-nav-btn" title="Acercar mapa (Zoom In)">➕</button>
+                            <button type="button" id="btn-canvas-zoom-out" class="canvas-nav-btn" title="Alejar mapa (Zoom Out)">➖</button>
+                            <button type="button" id="btn-canvas-reset-view" class="canvas-nav-btn" title="Restablecer vista y centrar">🎯</button>
+                            <button type="button" id="btn-canvas-expand-height" class="canvas-nav-btn" title="Expandir / Reducir altura del mapa">↕️</button>
+                        </div>
+
+                        <div class="canvas-instructions-overlay">
+                            <span>💡 Arrastra el fondo para moverte • Rueda para zoom • Clic para seleccionar • Arrastra equipos para ordenarlos</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- LISTADO DE GRUPOS CONFIGURADOS -->
+                <div style="margin-top: 24px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+                        <h3 style="font-size: 1.05rem; margin: 0; font-weight: 700;">📋 Grupos y Mesas de Trabajo Configuradas</h3>
+                        <button type="button" id="btn-abrir-crear-grupo-manual" class="btn btn-primary" style="font-size: 0.85rem;">
+                            + Nuevo Grupo Manual
+                        </button>
+                    </div>
+
+                    <div id="grid-tarjetas-grupos" class="groups-grid">
+                        <div class="activity-loading-placeholder">
+                            <div class="spinner"></div>
+                            <p>Cargando grupos y mesas de trabajo...</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- PESTAÑA 4: Gestión de Usuarios -->
+        <div id="tab-usuarios" class="tab-content">
+            <section class="panel">
+                <div class="panel-header">
+                    <h2>👥 Gestión de Cuentas de Acceso</h2>
+                </div>
+
+                <!-- Formulario de Creación de Usuario -->
+                <div class="user-form-card">
+                    <h3 style="margin: 0 0 14px; font-size: 0.95rem; font-weight: 700;">Registrar Nuevo Usuario</h3>
+                    <form id="form-crear-usuario" class="user-form-grid">
+                        <div class="form-group">
+                            <label for="nuevo-usuario-nombre">Usuario *</label>
+                            <input type="text" id="nuevo-usuario-nombre" class="input-texto" placeholder="ej: alumno2" required />
+                        </div>
+                        <div class="form-group">
+                            <label for="nuevo-usuario-clave">Contraseña *</label>
+                            <input type="password" id="nuevo-usuario-clave" class="input-texto" placeholder="••••••••" required />
+                        </div>
+                        <div class="form-group">
+                            <label for="nuevo-usuario-completo">Nombre Completo</label>
+                            <input type="text" id="nuevo-usuario-completo" class="input-texto" placeholder="ej: Juan Pérez (PC-02)" />
+                        </div>
+                        <div class="form-group">
+                            <label for="nuevo-usuario-rol">Rol / Nivel</label>
+                            <select id="nuevo-usuario-rol" class="select-rol">
+                                <option value="nivel_1">Nivel 1 (Estándar / Operativo)</option>
+                                <option value="nivel_2">Nivel 2 (Supervisión / Docentes)</option>
+                                <option value="admin">Administrador (Pase Libre)</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            + Crear Usuario
+                        </button>
+                    </form>
+                </div>
+
+                <div class="table-responsive">
+                    <table id="tabla-usuarios">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Usuario</th>
+                                <th>Nombre Completo</th>
+                                <th>Rol</th>
+                                <th>Fecha Registro</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Se completa dinámicamente -->
+                        </tbody>
+                    </table>
+                </div>
+                <p id="mensaje-usuarios" class="mensaje-vacio"></p>
+            </section>
+        </div>
+
+        <!-- PESTAÑA 5: Permisos y Roles (Control de Acceso Dinámico) -->
+        <div id="tab-roles" class="tab-content">
+            <section class="panel">
+                <div class="panel-header">
+                    <div>
+                        <h2>⚙️ Configuración y Permisos de Roles</h2>
+                        <p style="color: var(--color-texto-suave); font-size: 0.88rem; margin: 4px 0 0;">
+                            Define las políticas de red por defecto para cada nivel. Al aprobar una estación de trabajo, heredará automáticamente estos valores o podrás personalizarla de forma individual.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="roles-grid">
+                    <!-- Tarjeta: Nivel 1 -->
+                    <div class="role-card" id="card-rol-nivel1">
+                        <div class="role-card-header">
+                            <span class="user-role-badge role-nivel1" style="font-size: 0.85rem; padding: 4px 12px;">NIVEL 1</span>
+                            <span class="role-card-scope">Estándar / Operativo</span>
+                        </div>
+                        <h3 class="role-card-heading" style="margin: 0; font-size: 1.15rem; color: var(--text-primary);">Alumnos / Trabajadores / Clientes</h3>
+                        <p style="margin: 0; font-size: 0.85rem; color: var(--color-texto-suave); line-height: 1.5;">
+                            Aplica para los puestos estándar del entorno. Diseñado para un uso controlado y seguro con filtrado y límite de sesión.
+                        </p>
+
+                        <form id="form-politica-nivel1" class="role-policy-form">
+                            <div class="form-group">
+                                <label for="pol-tiempo-nivel1">Tiempo por Defecto (Minutos)</label>
+                                <input type="number" id="pol-tiempo-nivel1" min="0" max="1440" class="input-texto" placeholder="0 para ilimitado" required />
+                                <small style="color: var(--color-texto-suave); font-size: 0.75rem;">Ej: 120 min. Ingresa 0 para navegación ilimitada.</small>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="pol-vel-nivel1">Velocidad QoS de Navegación</label>
+                                <select id="pol-vel-nivel1" class="select-velocidad">
+                                    <option value="0">⚡ Ilimitada</option>
+                                    <option value="2">2 Mbps (Básico)</option>
+                                    <option value="5">5 Mbps (Estándar)</option>
+                                    <option value="10">10 Mbps (Recomendado)</option>
+                                    <option value="20">20 Mbps (Rápido)</option>
+                                    <option value="50">50 Mbps (Alto tráfico)</option>
+                                </select>
+                            </div>
+
+                            <div class="role-toggle-group">
+                                <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                    <input type="checkbox" id="pol-exento-nivel1" />
+                                    <span style="font-size: 0.85rem;">Exento de Filtrado Web</span>
+                                </label>
+                                <small style="color: var(--color-texto-suave); font-size: 0.75rem; display: block; margin-top: 2px;">
+                                    Si está desactivado, aplica la Lista Blanca web (solo sitios autorizados).
+                                </small>
+                            </div>
+
+                            <div class="role-toggle-group">
+                                <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                    <input type="checkbox" id="pol-reacceso-nivel1" checked />
+                                    <span style="font-size: 0.85rem;">Permitir solicitar nueva sesión</span>
+                                </label>
+                                <small style="color: var(--color-texto-suave); font-size: 0.75rem; display: block; margin-top: 2px;">
+                                    Muestra el botón en el portal para solicitar reactivación al expirar el tiempo.
+                                </small>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary" style="margin-top: 10px; width: 100%;">
+                                💾 Guardar Política Nivel 1
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Tarjeta: Nivel 2 -->
+                    <div class="role-card" id="card-rol-nivel2">
+                        <div class="role-card-header">
+                            <span class="user-role-badge role-nivel2" style="font-size: 0.85rem; padding: 4px 12px;">NIVEL 2</span>
+                            <span class="role-card-scope">Supervisión / Avanzado</span>
+                        </div>
+                        <h3 class="role-card-heading" style="margin: 0; font-size: 1.15rem; color: var(--text-primary);">Docentes / Jefes de Área / Encargados</h3>
+                        <p style="margin: 0; font-size: 0.85rem; color: var(--color-texto-suave); line-height: 1.5;">
+                            Aplica para profesores, facilitadores o encargados. Diseñado para conexión fluida y continua sin cortes imprevistos.
+                        </p>
+
+                        <form id="form-politica-nivel2" class="role-policy-form">
+                            <div class="form-group">
+                                <label for="pol-tiempo-nivel2">Tiempo por Defecto (Minutos)</label>
+                                <input type="number" id="pol-tiempo-nivel2" min="0" max="1440" class="input-texto" placeholder="0 para ilimitado" required />
+                                <small style="color: var(--color-texto-suave); font-size: 0.75rem;">0 = Sesión continua sin límite de tiempo.</small>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="pol-vel-nivel2">Velocidad QoS de Navegación</label>
+                                <select id="pol-vel-nivel2" class="select-velocidad">
+                                    <option value="0">⚡ Ilimitada (Sin restricción)</option>
+                                    <option value="10">10 Mbps</option>
+                                    <option value="20">20 Mbps</option>
+                                    <option value="50">50 Mbps</option>
+                                </select>
+                            </div>
+
+                            <div class="role-toggle-group">
+                                <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                    <input type="checkbox" id="pol-exento-nivel2" checked />
+                                    <span style="font-size: 0.85rem;">Exento de Filtrado Web</span>
+                                </label>
+                                <small style="color: var(--color-texto-suave); font-size: 0.75rem; display: block; margin-top: 2px;">
+                                    Navega libre de restricciones web salvo que se aplique una regla explícita.
+                                </small>
+                            </div>
+
+                            <div class="role-toggle-group">
+                                <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                    <input type="checkbox" id="pol-reacceso-nivel2" checked />
+                                    <span style="font-size: 0.85rem;">Permitir solicitar nueva sesión</span>
+                                </label>
+                                <small style="color: var(--color-texto-suave); font-size: 0.75rem; display: block; margin-top: 2px;">
+                                    Habilitado por defecto para estaciones Nivel 2.
+                                </small>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary" style="margin-top: 10px; width: 100%;">
+                                💾 Guardar Política Nivel 2
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Tarjeta: Administrador (Pase Libre Inmutable) -->
+                    <div class="role-card role-card-admin" id="card-rol-admin">
+                        <div class="role-card-header">
+                            <span class="user-role-badge role-admin" style="font-size: 0.85rem; padding: 4px 12px;">ADMIN</span>
+                            <span class="role-card-scope" style="color: #FCD34D;">🛡️ Pase Libre Permanente</span>
+                        </div>
+                        <h3 class="role-admin-title" style="margin: 0; font-size: 1.15rem;">Estación del Administrador</h3>
+                        <p style="margin: 0; font-size: 0.85rem; color: var(--color-texto-suave); line-height: 1.5;">
+                            Tu equipo de control cuenta con inmunidad absoluta en la infraestructura de MikroTik. Ninguna política o bloqueo puede restringirte.
+                        </p>
+
+                        <div class="role-admin-box">
+                            <div class="role-admin-item">
+                                <span>⚡</span> <strong>Velocidad:</strong> 100% de la red sin cola Simple Queue.
+                            </div>
+                            <div class="role-admin-item">
+                                <span>⏳</span> <strong>Tiempo de Conexión:</strong> Permanente y sin expiración.
+                            </div>
+                            <div class="role-admin-item">
+                                <span>🌐</span> <strong>Filtrado Web:</strong> Bypass DNS directo a Google 8.8.8.8.
+                            </div>
+                            <div class="role-admin-item">
+                                <span>🔒</span> <strong>Firewall MikroTik:</strong> Regla prioritaria ACCEPT incondicional.
+                            </div>
+                        </div>
+
+                        <div class="role-admin-shield">
+                            ✓ Blindaje de Pase Libre Activo en RouterOS
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- PESTAÑA 6: Materiales y Archivos Compartidos -->
+        <div id="tab-archivos" class="tab-content">
+            <section class="panel">
+                <div class="panel-header">
+                    <div>
+                        <h2>📁 Materiales y Archivos del Laboratorio</h2>
+                        <p style="color: var(--color-texto-suave); font-size: 0.88rem; margin: 4px 0 0;">
+                            Sube guías prácticas, PDFs, software o archivos para la clase. Los puestos autorizados podrán descargarlos directamente desde su portal sin consumir internet externo.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Formulario de Subida -->
+                <div class="user-form-card">
+                    <h3 style="margin: 0 0 14px; font-size: 0.95rem; font-weight: 700; color: var(--text-primary);">
+                        📤 Subir Nuevo Archivo para la Red
+                    </h3>
+                    <form id="form-subir-archivo" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; align-items: flex-end;">
+                        <div class="form-group" style="grid-column: span 2;">
+                            <label for="input-archivo-file" style="display: block; margin-bottom: 6px; font-weight: 600; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);">
+                                Seleccionar Archivo (PDF, ZIP, DOCX, TXT, etc.) *
+                            </label>
+                            <label class="upload-dropzone" for="input-archivo-file" id="dropzone-archivo">
+                                <input type="file" id="input-archivo-file" required accept=".pdf,.zip,.docx,.txt,.png,.jpg,.jpeg,.xlsx,.pptx" />
+                                <div class="upload-icon-box">
+                                    <svg class="upload-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                        <polyline points="17 8 12 3 7 8"></polyline>
+                                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                                    </svg>
+                                </div>
+                                <div class="upload-text-wrap">
+                                    <div class="upload-headline">
+                                        <span class="upload-btn-fake">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                            Elegir Archivo
+                                        </span>
+                                        <span class="upload-label-main">o arrastra y suelta tu archivo aquí</span>
+                                    </div>
+                                    <span class="upload-label-sub">Soporta PDF, ZIP, DOCX, TXT, PNG, JPG • Límite máximo: 50 MB</span>
+                                    <div class="upload-filename-row">
+                                        <span class="upload-filename-status-icon">📎</span>
+                                        <span class="upload-filename" id="upload-filename-display">Ningún archivo seleccionado</span>
+                                    </div>
+                                </div>
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label for="input-archivo-desc">Descripción / Asignatura</label>
+                            <input type="text" id="input-archivo-desc" class="input-texto" placeholder="ej: Guía Práctica 02 - Redes" />
+                        </div>
+                        <div class="form-group">
+                            <label for="select-archivo-alcance">Destinatarios / Alcance</label>
+                            <select id="select-archivo-alcance" class="select-rol">
+                                <option value="todos">🌐 Toda la Red (Todos los niveles)</option>
+                                <option value="nivel_1">👥 Solo Nivel 1 (Alumnos / Operativo)</option>
+                                <option value="nivel_2">👥 Solo Nivel 2 (Docentes / Supervisión)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <button type="submit" class="btn btn-primary btn-share-file" id="btn-submit-archivo" style="width: 100%;">
+                                📤 Compartir en Red
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Tabla de Archivos Compartidos -->
+                <div class="table-responsive">
+                    <table id="tabla-archivos">
+                        <thead>
+                            <tr>
+                                <th>Nombre del Archivo</th>
+                                <th>Descripción</th>
+                                <th>Tamaño</th>
+                                <th>Alcance</th>
+                                <th>Fecha de Subida</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Se completa dinámicamente -->
+                        </tbody>
+                    </table>
+                </div>
+                <p id="mensaje-archivos" class="mensaje-vacio"></p>
+            </section>
+        </div>
+
+        <!-- PESTAÑA 7: Mensajería y Notificaciones en Red -->
+        <div id="tab-mensajes" class="tab-content">
+            <section class="panel">
+                <div class="panel-header">
+                    <div>
+                        <h2>💬 Centro de Mensajería y Soporte</h2>
+                        <p style="color: var(--color-texto-suave); font-size: 0.88rem; margin: 4px 0 0;">
+                            Gestiona anuncios a toda la red y responde a las consultas y chats directos de las estaciones de trabajo.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Sub-pestañas: Comunicados Emitidos vs Bandeja de Estaciones -->
+                <div class="activity-tabs-pills" style="margin-bottom: 20px;">
+                    <button type="button" class="btn-act-tab active" id="btn-subtab-broadcast" data-subtab="broadcast">
+                        📢 Comunicados a la Red
+                    </button>
+                    <button type="button" class="btn-act-tab" id="btn-subtab-inbox" data-subtab="inbox">
+                        📥 Mensajes Recibidos de Alumnos / Estaciones
+                        <span id="badge-inbox-contador" class="badge badge-online" style="margin-left: 6px; font-size: 0.72rem; display: none;">0</span>
+                    </button>
+                </div>
+
+                <!-- SECCIÓN 1: Comunicados Emitidos (Broadcast) -->
+                <div id="subseccion-mensajes-broadcast">
+
+                <!-- Formulario de Emisión de Mensaje -->
+                <div class="user-form-card">
+                    <h3 style="margin: 0 0 14px; font-size: 0.95rem; font-weight: 700; color: var(--text-primary);">
+                        📢 Emitir Nuevo Comunicado
+                    </h3>
+                    <form id="form-enviar-mensaje">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 14px;">
+                            <div class="form-group">
+                                <label for="input-mensaje-titulo">Título del Anuncio *</label>
+                                <input type="text" id="input-mensaje-titulo" class="input-texto" placeholder="ej: Fin de la clase en 10 minutos" required />
+                            </div>
+                            <div class="form-group">
+                                <label for="select-mensaje-tipo">Tipo de Prioridad</label>
+                                <select id="select-mensaje-tipo" class="select-rol">
+                                    <option value="info">ℹ️ Informativo (Azul / Normal)</option>
+                                    <option value="aviso">⚠️ Aviso Importante (Ámbar / Recordatorio)</option>
+                                    <option value="urgente">🚨 Alerta Urgente (Rojo / Atención inmediata)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="select-mensaje-alcance">Destinatarios</label>
+                                <select id="select-mensaje-alcance" class="select-rol">
+                                    <option value="todos">🌐 Toda la Red (Todos los puestos)</option>
+                                    <option value="nivel_1">👥 Solo Nivel 1 (Alumnos / Operativo)</option>
+                                    <option value="nivel_2">👥 Solo Nivel 2 (Docentes / Encargados)</option>
+                                    <option value="dispositivo">🎯 Estación puntual...</option>
+                                </select>
+                            </div>
+                            <div class="form-group" id="grupo-mensaje-dispositivo" style="display: none;">
+                                <label for="select-mensaje-dispositivo">Seleccionar Estación</label>
+                                <select id="select-mensaje-dispositivo" class="select-rol">
+                                    <!-- Se completa con PCs conectadas -->
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: 14px;">
+                            <label for="input-mensaje-contenido">Mensaje / Instrucciones *</label>
+                            <textarea id="input-mensaje-contenido" class="input-texto" rows="3" placeholder="Escribe el mensaje que verán las estaciones en su portal..." required style="resize: vertical;"></textarea>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 8px;">
+                            📢 Enviar Comunicado a la Red
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Historial de Comunicados -->
+                <div class="table-responsive">
+                    <table id="tabla-mensajes">
+                        <thead>
+                            <tr>
+                                <th>Fecha / Hora</th>
+                                <th>Prioridad</th>
+                                <th>Alcance</th>
+                                <th>Título y Contenido</th>
+                                <th>Estado</th>
+                                <th>Confirmación de Lectura</th>
+                                <th>Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Se completa dinámicamente -->
+                        </tbody>
+                    </table>
+                </div>
+                <p id="mensaje-mensajes" class="mensaje-vacio"></p>
+                </div>
+
+                <!-- SECCIÓN 2: Bandeja de Mensajes y Consultas de Alumnos -->
+                <div id="subseccion-mensajes-inbox" style="display: none;">
+                    <div style="display: grid; grid-template-columns: minmax(280px, 340px) 1fr; gap: 18px; min-height: 480px;">
+                        <!-- Lista de Estaciones / Conversaciones -->
+                        <div style="background: var(--bg-surface); border: 1px solid var(--border-base); border-radius: 12px; display: flex; flex-direction: column; overflow: hidden;">
+                            <div style="padding: 14px 16px; border-bottom: 1px solid var(--border-base); background: rgba(255,255,255,0.02); display: flex; justify-content: space-between; align-items: center;">
+                                <strong style="font-size: 0.9rem;">📥 Estaciones en Espera</strong>
+                                <button type="button" id="btn-refrescar-inbox" class="btn btn-secondary" style="padding: 4px 10px; font-size: 0.78rem;">🔄 Actualizar</button>
+                            </div>
+                            <div id="lista-conversaciones-inbox" style="flex: 1; overflow-y: auto; max-height: 520px; padding: 8px;">
+                                <!-- Se llena dinámicamente -->
+                                <p style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 20px;">Cargando mensajes de alumnos...</p>
+                            </div>
+                        </div>
+
+                        <!-- Panel de Conversación Activa -->
+                        <div style="background: var(--bg-surface); border: 1px solid var(--border-base); border-radius: 12px; display: flex; flex-direction: column; overflow: hidden;">
+                            <div id="header-chat-admin" style="padding: 14px 18px; border-bottom: 1px solid var(--border-base); background: rgba(255,255,255,0.02); display: flex; align-items: center; justify-content: space-between;">
+                                <div>
+                                    <strong id="txt-inbox-estacion-titulo" style="font-size: 0.95rem;">Selecciona una conversación</strong>
+                                    <span id="txt-inbox-estacion-ip" style="font-size: 0.8rem; color: var(--text-muted); margin-left: 8px; font-family: var(--font-mono);"></span>
+                                </div>
+                                <span id="badge-inbox-estacion-estado" class="badge badge-online" style="display: none;">🟢 En Línea</span>
+                            </div>
+
+                            <div id="caja-mensajes-inbox-chat" style="flex: 1; overflow-y: auto; padding: 18px; min-height: 340px; max-height: 420px; display: flex; flex-direction: column; gap: 12px;">
+                                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--text-muted); text-align: center; padding: 40px 20px;">
+                                    <span style="font-size: 2.2rem; margin-bottom: 10px;">💬</span>
+                                    <p style="margin: 0; font-size: 0.9rem;">Elige una estación en la lista de la izquierda para leer sus mensajes y responderle directamente.</p>
+                                </div>
+                            </div>
+
+                            <form id="form-responder-inbox-admin" style="padding: 14px 18px; border-top: 1px solid var(--border-base); background: rgba(255,255,255,0.01); display: flex; gap: 10px; align-items: center;">
+                                <input type="text" id="input-respuesta-admin" class="input-texto" placeholder="Escribe una respuesta para esta estación..." style="flex: 1;" disabled autocomplete="off" />
+                                <button type="submit" id="btn-enviar-respuesta-admin" class="btn btn-primary" style="padding: 9px 18px;" disabled>
+                                    🚀 Enviar
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Modal de Configuración / Edición de Dispositivo -->
+    <div id="modal-config-dispositivo" class="modal-backdrop" style="display: none;">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 id="modal-config-titulo">⚙️ Configurar Dispositivo</h3>
+                <button type="button" class="btn-cerrar-modal" id="btn-cerrar-modal-config">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-info-dispositivo" id="modal-info-tags"></div>
+                <form id="form-config-dispositivo">
+                    <input type="hidden" id="modal-config-dev-id" />
+                    <div class="form-group">
+                        <label for="modal-config-nombre">Nombre / Identificador de la PC</label>
+                        <input type="text" id="modal-config-nombre" class="input-texto" placeholder="ej: DESKTOP-01 (Mesa 3)" />
+                    </div>
+                    <div class="form-group">
+                        <label for="modal-config-rol">Nivel de Acceso / Rol del Equipo</label>
+                        <select id="modal-config-rol" class="select-velocidad" style="width: 100%;">
+                            <option value="nivel_1">Nivel 1 (Estándar: Alumnos / Trabajadores / Clientes)</option>
+                            <option value="nivel_2">Nivel 2 (Supervisión: Docentes / Encargados de Área)</option>
+                        </select>
+                        <small style="color: var(--color-texto-suave); font-size: 0.78rem;">Al cambiar el nivel se sugieren automáticamente tiempo y velocidad recomendados.</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="modal-config-tiempo">Tiempo Límite de Sesión (Minutos)</label>
+                        <input type="number" min="1" id="modal-config-tiempo" class="input-texto" placeholder="Dejar vacío para Ilimitado" />
+                        <small style="color: var(--color-texto-suave); font-size: 0.78rem;">Dejá en blanco si querés sesión sin límite de tiempo (Ilimitado ∞).</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="modal-config-velocidad">Límite de Ancho de Banda (QoS MikroTik)</label>
+                        <select id="modal-config-velocidad" class="select-velocidad" style="width: 100%;">
+                            <option value="">Velocidad Ilimitada</option>
+                            <option value="2">2 Mbps (Básico)</option>
+                            <option value="5">5 Mbps (Estándar)</option>
+                            <option value="10">10 Mbps (Rápido)</option>
+                            <option value="20">20 Mbps (Alto)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="modal-config-filtro">Políticas de Filtrado Web</label>
+                        <select id="modal-config-filtro" class="select-velocidad" style="width: 100%;">
+                            <option value="false">🛡️ Filtrado Activo (Bloquear sitios restringidos)</option>
+                            <option value="true">🔓 Exento del Filtro (Pase Libre - Navegación total)</option>
+                        </select>
+                        <small style="color: var(--color-texto-suave); font-size: 0.78rem;">Si está exento, esta PC podrá acceder a YouTube y sitios bloqueados.</small>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn-logout" id="btn-cancelar-modal-config">Cancelar</button>
+                        <button type="submit" class="btn btn-primary" id="btn-guardar-modal-config">Guardar Cambios</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Editar Dominio de Lista Blanca y Alcance de Navegación -->
+    <div id="modal-editar-dominio" class="modal-backdrop" style="display: none;">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>✏️ Editar Dominio en Lista Blanca</h3>
+                <button type="button" class="btn-cerrar-modal" id="btn-cerrar-modal-editar-dominio">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="form-editar-dominio">
+                    <input type="hidden" id="edit-dominio-id" />
+                    
+                    <div class="form-group">
+                        <label for="edit-dominio-nombre">Dominio Autorizado</label>
+                        <input type="text" id="edit-dominio-nombre" class="input-texto" readonly style="background: rgba(255, 255, 255, 0.05); font-weight: 700; color: #00E5FF;" />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="edit-dominio-categoria">Categoría</label>
+                        <select id="edit-dominio-categoria" class="select-velocidad" style="width: 100%;">
+                            <option value="Educación / Estudio">Educación / Estudio</option>
+                            <option value="Buscadores">Buscadores</option>
+                            <option value="Herramientas">Herramientas</option>
+                            <option value="Institucional">Institucional</option>
+                            <option value="Documentación">Documentación</option>
+                            <option value="General">General</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="edit-dominio-alcance">Alcance de Navegación</label>
+                        <select id="edit-dominio-alcance" class="select-velocidad" style="width: 100%;">
+                            <option value="todos">🌐 Toda la red de alumnos (Admin y Nivel 2 exentos)</option>
+                            <option value="rol_nivel_1">👥 Solo Alumnos (Nivel 1)</option>
+                            <option value="rol_nivel_2">👨‍🏫 Solo Docentes (Nivel 2)</option>
+                            <option value="solo_seleccionados">🎯 Solo PCs específicas seleccionadas</option>
+                            <option value="todos_excepto">🛡️ Toda la red excepto PCs seleccionadas</option>
+                        </select>
+                        <small style="color: var(--color-texto-suave); font-size: 0.78rem;">Define qué computadoras o niveles tienen permiso para navegar en este dominio.</small>
+                    </div>
+
+                    <!-- Contenedor dinámico de checkboxes para PCs específicas -->
+                    <div id="edit-contenedor-pcs" style="display: none; margin-top: 10px; padding: 12px; background: rgba(0, 0, 0, 0.25); border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.08);">
+                        <span style="font-size: 0.8rem; font-weight: 600; color: #CBD5E1; display: block; margin-bottom: 8px;">
+                            Selecciona las computadoras afectadas:
+                        </span>
+                        <div id="edit-lista-checkboxes-pcs" style="display: flex; flex-wrap: wrap; gap: 10px;">
+                            <!-- Checkboxes generados dinámicamente -->
+                        </div>
+                    </div>
+
+                    <div class="modal-actions" style="margin-top: 20px;">
+                        <button type="button" class="btn btn-logout" id="btn-cancelar-modal-editar-dominio">Cancelar</button>
+                        <button type="submit" class="btn btn-primary" id="btn-guardar-modal-editar-dominio">💾 Guardar Cambios</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DETALLE DE ACTIVIDAD Y APLICACIONES -->
+    <div id="modal-detalle-actividad" class="modal-backdrop" style="display: none;">
+        <div class="modal-card modal-card-large">
+            <div class="modal-header">
+                <div class="modal-device-title-wrap">
+                    <div id="modal-act-icono" class="modal-device-icon-svg"></div>
+                    <div>
+                        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                            <h3 id="modal-act-nombre">DESKTOP-DJ1BCQP</h3>
+                            <span id="modal-act-badge-estado" class="badge badge-online">🟢 En Línea</span>
+                            <span id="modal-act-badge-rol" class="user-role-badge role-nivel1">NIVEL 1</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 12px; margin-top: 4px; font-size: 0.82rem; color: var(--color-texto-suave); flex-wrap: wrap;">
+                            <span id="modal-act-ip" class="td-mono">192.168.88.251</span>
+                            <span>•</span>
+                            <span id="modal-act-mac" class="td-mono">18:C0:4D:92:8C:8E</span>
+                            <span>•</span>
+                            <span id="modal-act-tipo-texto">Computadora PC</span>
+                        </div>
+                    </div>
+                </div>
+                <button type="button" class="btn-cerrar-modal modal-close-destacado" id="btn-cerrar-modal-actividad" title="Cerrar ventana (Esc)">✕</button>
+            </div>
+
+            <div class="modal-body">
+                <!-- Selector de Período (Hoy, Últimos 7 Días, Histórico Total) -->
+                <div class="activity-period-selector-wrap">
+                    <span style="font-size: 0.85rem; font-weight: 600; color: var(--color-texto);">Período de Análisis:</span>
+                    <div class="period-pills-group">
+                        <button type="button" class="btn-period-pill active" data-periodo="hoy">📅 Hoy (Día Actual)</button>
+                        <button type="button" class="btn-period-pill" data-periodo="semana">📆 Últimos 7 Días</button>
+                        <button type="button" class="btn-period-pill" data-periodo="historico">📊 Histórico Total</button>
+                    </div>
+                </div>
+
+                <!-- Resumen de Métricas Clave -->
+                <div class="activity-modal-stats-grid">
+                    <div class="act-stat-box">
+                        <span class="act-stat-lbl">⏱️ Tiempo Activo</span>
+                        <span class="act-stat-val" id="modal-act-tiempo-total">0h 00m</span>
+                        <span class="act-stat-sub" id="modal-act-tiempo-sub">Total registrado</span>
+                    </div>
+                    <div class="act-stat-box">
+                        <span class="act-stat-lbl">📥 Tráfico Descarga</span>
+                        <span class="act-stat-val" id="modal-act-descarga-total">0 MB</span>
+                        <span class="act-stat-sub">Datos entrantes</span>
+                    </div>
+                    <div class="act-stat-box">
+                        <span class="act-stat-lbl">📤 Tráfico Subida</span>
+                        <span class="act-stat-val" id="modal-act-subida-total">0 MB</span>
+                        <span class="act-stat-sub">Datos salientes</span>
+                    </div>
+                    <div class="act-stat-box">
+                        <span class="act-stat-lbl">⚡ Estado Actual</span>
+                        <span class="act-stat-val" id="modal-act-estado-vivo" style="font-size: 1.05rem; color: #ec4899;">Inactivo</span>
+                        <span class="act-stat-sub">En tiempo real</span>
+                    </div>
+                </div>
+
+                <!-- Contenedor de 2 Columnas: Desglose por Categoría y Gráfico de Distribución -->
+                <div class="activity-modal-columns">
+                    <!-- Columna Izquierda: Desglose de Categorías -->
+                    <div class="activity-breakdown-col">
+                        <div class="activity-breakdown-header-tabs">
+                            <div class="activity-tabs-pills">
+                                <button type="button" class="btn-act-tab active" id="tab-act-apps" data-tab="apps">
+                                    📱 Aplicaciones y Sitios Web (<span id="modal-act-count-apps">0</span>)
+                                </button>
+                                <button type="button" class="btn-act-tab" id="tab-act-cats" data-tab="categorias">
+                                    📊 Categorías Resumen
+                                </button>
+                            </div>
+                            <span style="font-size: 0.76rem; color: var(--color-texto-suave); font-weight: 500;">En tiempo real</span>
+                        </div>
+                        <div id="modal-act-categorias-lista" class="activity-categories-list">
+                            <!-- Se inyecta dinámicamente -->
+                        </div>
+                    </div>
+
+                    <!-- Columna Derecha: Gráfico Dona de Distribución -->
+                    <div class="activity-chart-col">
+                        <h4 style="font-size: 0.95rem; margin-bottom: 12px;">Distribución del Tiempo</h4>
+                        <div class="activity-chart-container">
+                            <canvas id="chart-actividad-dona" width="220" height="220"></canvas>
+                        </div>
+                        <div id="modal-act-chart-legend" class="activity-chart-legend"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-actions" style="margin-top: 0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                <span style="font-size: 0.78rem; color: var(--color-texto-suave);">
+                    💡 Detecta Dota 2/Steam por puertos UDP 27000-27050, Streaming por TLS/Video y plataformas educativas.
+                </span>
+                <button type="button" class="btn btn-cerrar-modal-footer-destacado" id="btn-cerrar-modal-act-footer">✕ Cerrar Ventana</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL CREAR / EDITAR GRUPO DE TRABAJO AISLADO -->
+    <div id="modal-crear-editar-grupo" class="modal-backdrop" style="display: none;">
+        <div class="modal-card modal-card-large">
+            <div class="modal-header">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <span style="font-size: 1.5rem;">👥</span>
+                    <div>
+                        <h3 id="modal-grupo-titulo" style="margin: 0; font-size: 1.15rem;">Configurar Mesa de Trabajo / Grupo</h3>
+                        <span style="font-size: 0.8rem; color: var(--color-texto-suave);">Define integrantes, líder y permisos de comunicación</span>
+                    </div>
+                </div>
+                <button type="button" class="btn-cerrar-modal modal-close-destacado" id="btn-cerrar-modal-grupo" title="Cerrar modal (Esc)">✕</button>
+            </div>
+
+            <form id="form-crear-editar-grupo">
+                <div class="modal-body">
+                    <input type="hidden" id="modal-grupo-id-edit" value="" />
+
+                    <!-- Nombre del Grupo y Color -->
+                    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 14px;">
+                        <div class="form-group">
+                            <label for="modal-grupo-nombre">Nombre de la Mesa / Grupo *</label>
+                            <input type="text" id="modal-grupo-nombre" class="input-texto" placeholder="ej: Mesa 1 — Redes y Seguridad" required />
+                        </div>
+                        <div class="form-group">
+                            <label for="modal-grupo-color">Color Temático</label>
+                            <select id="modal-grupo-color" class="select-rol">
+                                <option value="#6366f1">🟣 Violeta Índigo</option>
+                                <option value="#00E5FF">🔵 Cian Eléctrico</option>
+                                <option value="#10b981">🟢 Verde Esmeralda</option>
+                                <option value="#f59e0b">🟡 Ámbar Dorado</option>
+                                <option value="#ec4899">🌸 Rosa Fucsia</option>
+                                <option value="#ef4444">🔴 Carmesí</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Selección de Integrantes -->
+                    <div class="form-group">
+                        <label style="display: flex; justify-content: space-between; align-items: center;">
+                            <span>Integrantes del Grupo (Selecciona los puestos de trabajo) *</span>
+                            <span id="txt-conteo-dispositivos-modal" style="font-size: 0.78rem; color: var(--color-texto-suave);">0 seleccionados</span>
+                        </label>
+                        <div id="modal-lista-dispositivos-checkboxes" class="modal-device-selector-list">
+                            <!-- Inyectado dinámicamente -->
+                        </div>
+                    </div>
+
+                    <!-- Asignación de Líder del Grupo -->
+                    <div class="form-group" style="background: rgba(99, 102, 241, 0.08); padding: 12px 14px; border-radius: 10px; border: 1px solid rgba(99, 102, 241, 0.2);">
+                        <label for="modal-grupo-lider" style="font-weight: 700; color: #a5b4fc; display: flex; align-items: center; gap: 6px;">
+                            <span>👑 Líder del Grupo (Puesto de Trabajo Encargado)</span>
+                        </label>
+                        <select id="modal-grupo-lider" class="select-rol" style="margin-top: 6px; width: 100%;">
+                            <option value="">Selecciona un integrante para que sea el líder...</option>
+                        </select>
+                        <small style="display: block; margin-top: 6px; font-size: 0.76rem; color: var(--color-texto-suave);">
+                            El líder tiene la corona y facultades especiales para coordinar a sus compañeros.
+                        </small>
+                    </div>
+
+                    <!-- Permisos Especiales del Líder -->
+                    <div style="display: flex; flex-direction: column; gap: 10px; padding: 10px 14px; background: var(--bg-secondary); border-radius: 10px; border: 1px solid var(--border-color);">
+                        <strong style="font-size: 0.82rem; color: var(--color-texto);">Permisos y Facultades del Líder:</strong>
+                        <label style="display: flex; align-items: center; gap: 10px; font-size: 0.85rem; cursor: pointer;">
+                            <input type="checkbox" id="modal-check-archivos-lider" checked />
+                            <span>📁 <strong>Permitir al Líder compartir archivos</strong> con sus compañeros del grupo.</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 10px; font-size: 0.85rem; cursor: pointer;">
+                            <input type="checkbox" id="modal-check-chat-admin" checked />
+                            <span>🛡️ <strong>Permitir al Líder comunicarse directamente</strong> con el Administrador / Docente.</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="modal-actions" style="margin-top: 0; display: flex; justify-content: flex-end; align-items: center; gap: 10px;">
+                    <button type="button" class="btn btn-secondary" id="btn-cancelar-modal-grupo">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" id="btn-guardar-modal-grupo">Guardar Grupo</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL VISOR INTERACTIVO DE ARCHIVOS (PDFs, IMÁGENES, TEXTO) -->
+    <div id="modal-visor-archivo" class="modal-visor-backdrop">
+        <div class="modal-visor-card">
+            <div class="visor-header">
+                <div class="visor-title-wrap">
+                    <span id="visor-icono" class="visor-icon">📄</span>
+                    <div>
+                        <h3 id="visor-nombre" class="visor-filename">archivo</h3>
+                        <span id="visor-meta" class="visor-meta">0 KB • Recurso</span>
+                    </div>
+                </div>
+                <button id="btn-cerrar-visor" type="button" class="visor-close-btn" title="Cerrar">&times;</button>
+            </div>
+            <div id="visor-body" class="visor-body">
+                <!-- Se inyecta la vista previa -->
+            </div>
+            <div class="visor-footer">
+                <span id="visor-info-footer" style="font-size: 0.82rem; color: var(--color-texto-suave);">Visualizador seguro de recursos de NetworkLab</span>
+                <div style="display: flex; gap: 10px;">
+                    <a id="visor-btn-descargar" href="#" class="btn" style="background: linear-gradient(135deg, #0284C7, #00E5FF); color: #0B0F19; font-weight: 700; padding: 8px 18px; border-radius: 8px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+                        ⬇️ Descargar
+                    </a>
+                    <button id="btn-cerrar-visor-2" type="button" class="btn" style="background: rgba(255,255,255,0.08); color: #f1f5f9; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); cursor: pointer;">
+                        Cerrar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <span id="estado-conexion">Conectado al backend</span>
+    </footer>
+
+    <!-- Canvas de red animado en el fondo -->
+    <canvas id="network-canvas" aria-hidden="true"></canvas>
+
+    <script src="js/pdf.min.js"></script>
+    <script src="js/app.js?v=7.1"></script>
+    <script>
+    // ── NetworkCanvas: malla de nodos de red animada en el fondo ──
+    (function() {
+        const canvas = document.getElementById('network-canvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        let W, H, nodes = [], animFrame;
+
+        const COLORS = ['rgba(139,92,246,', 'rgba(236,72,153,', 'rgba(251,146,60,', 'rgba(0,217,255,'];
+        const NODE_COUNT = 55;
+        const CONNECT_DIST = 160;
+        const NODE_SPEED = 0.25;
+
+        function resize() {
+            W = canvas.width  = window.innerWidth;
+            H = canvas.height = window.innerHeight;
+        }
+
+        function randomNode() {
+            const c = COLORS[Math.floor(Math.random() * COLORS.length)];
+            return {
+                x: Math.random() * W,
+                y: Math.random() * H,
+                vx: (Math.random() - 0.5) * NODE_SPEED,
+                vy: (Math.random() - 0.5) * NODE_SPEED,
+                r: 1.5 + Math.random() * 2,
+                color: c,
+                pulse: Math.random() * Math.PI * 2,
+                pulseSpeed: 0.02 + Math.random() * 0.02
+            };
+        }
+
+        function init() {
+            resize();
+            nodes = Array.from({ length: NODE_COUNT }, randomNode);
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, W, H);
+
+            // Conexiones entre nodos cercanos
+            for (let i = 0; i < nodes.length; i++) {
+                for (let j = i + 1; j < nodes.length; j++) {
+                    const dx = nodes[i].x - nodes[j].x;
+                    const dy = nodes[i].y - nodes[j].y;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    if (dist < CONNECT_DIST) {
+                        const alpha = (1 - dist / CONNECT_DIST) * 0.35;
+                        ctx.beginPath();
+                        ctx.moveTo(nodes[i].x, nodes[i].y);
+                        ctx.lineTo(nodes[j].x, nodes[j].y);
+                        ctx.strokeStyle = nodes[i].color + alpha + ')';
+                        ctx.lineWidth = 0.8;
+                        ctx.stroke();
+                    }
+                }
+            }
+
+            // Nodos
+            nodes.forEach(n => {
+                n.pulse += n.pulseSpeed;
+                const pulseFactor = 0.5 + 0.5 * Math.sin(n.pulse);
+                const r = n.r * (0.85 + 0.35 * pulseFactor);
+                const alpha = 0.4 + 0.5 * pulseFactor;
+
+                ctx.beginPath();
+                ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+                ctx.fillStyle = n.color + alpha + ')';
+                ctx.fill();
+
+                // Halo sutil
+                ctx.beginPath();
+                ctx.arc(n.x, n.y, r * 2.5, 0, Math.PI * 2);
+                ctx.fillStyle = n.color + (alpha * 0.12) + ')';
+                ctx.fill();
+
+                // Movimiento
+                n.x += n.vx;
+                n.y += n.vy;
+                if (n.x < -20 || n.x > W + 20) n.vx *= -1;
+                if (n.y < -20 || n.y > H + 20) n.vy *= -1;
+            });
+
+            animFrame = requestAnimationFrame(draw);
+        }
+
+        init();
+        draw();
+        window.addEventListener('resize', () => { resize(); });
+
+        // Pausa cuando no es visible (ahorro de rendimiento)
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) { cancelAnimationFrame(animFrame); }
+            else { draw(); }
+        });
+    })();
+    </script>
+</body>
+
+</html>

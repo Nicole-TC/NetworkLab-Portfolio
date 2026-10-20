@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NetworkLab — Iniciar Sesión</title>
+    <meta name="description" content="Plataforma de administración de red y laboratorios. Control de acceso, tiempo de conexión y filtrado web." />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="alternate icon" href="favicon.ico" />
+    <link rel="apple-touch-icon" href="favicon.png" />
+    <link rel="stylesheet" href="css/style.css?v=6.0" />
+</head>
+
+<body class="login-page">
+<div id="page-loader" class="page-loader">
+    <div class="loader-brand">🛡️ NetworkLab</div>
+    <div class="loader-dots">
+      <span></span><span></span><span></span><span></span>
+    </div>
+    <div class="loader-bar-wrap"><div class="loader-bar"></div></div>
+    <div class="loader-text">Iniciando sistema de red...</div>
+</div>
+<script>
+  window.addEventListener("load", function() {
+    setTimeout(function() {
+      var l = document.getElementById("page-loader");
+      if (l) { l.classList.add("hidden"); setTimeout(function(){ l.remove(); }, 600); }
+    }, 800);
+  });
+</script>
+    <div class="login-card">
+        <div class="login-header">
+            <h1>🛡️ NetworkLab</h1>
+            <p>Administración de Red · Control de Acceso y Filtrado Web</p>
+        </div>
+
+        <form id="form-login" class="login-form">
+            <div class="form-group">
+                <label for="input-usuario">Usuario</label>
+                <input 
+                    type="text" 
+                    id="input-usuario" 
+                    class="input-texto" 
+                    placeholder="Ingresa tu usuario" 
+                    required 
+                    autocomplete="username"
+                />
+            </div>
+
+            <div class="form-group">
+                <label for="input-clave">Contraseña</label>
+                <input 
+                    type="password" 
+                    id="input-clave" 
+                    class="input-texto" 
+                    placeholder="••••••••" 
+                    required 
+                    autocomplete="current-password"
+                />
+            </div>
+
+            <p id="mensaje-error" style="color: var(--color-rojo); font-size: 0.85rem; margin: 4px 0 0; display: none; text-align: center;"></p>
+
+            <button type="submit" id="btn-login" class="btn btn-primary btn-login">
+                Ingresar al Sistema
+            </button>
+        </form>
+
+        <div class="demo-credentials">
+            <strong>Credenciales por defecto:</strong><br />
+            • Administrador: <code>admin</code> / <code>admin123</code><br />
+            • Estación: <code>alumno1</code> / <code>alumno123</code>
+        </div>
+    </div>
+
+    <script src="js/login.js?v=6.0"></script>
+</body>
+
+</html>
